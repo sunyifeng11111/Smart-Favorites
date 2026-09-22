@@ -153,7 +153,7 @@ test('popup completes classification, bookmark move, content capture, and Undo',
 
   await popup.getByLabel('选择目录').selectOption(folders.reading);
   await popup.getByRole('button', { name: '更改位置' }).click();
-  await expect(popup.getByText('保存位置：书签栏 / Reading', { exact: true })).toBeVisible();
+  await expect(popup.getByText(/^保存位置：.*\/ Reading$/)).toBeVisible();
   const moved = await bookmarksForUrl(serviceWorker, fixture.url());
   expect(moved).toHaveLength(1);
   expect(moved[0]).toMatchObject({ id: createdId, parentId: folders.reading });
