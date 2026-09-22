@@ -58,6 +58,40 @@ test('production manifest and settings wiring are verifiable in Chromium', async
   await expect(page.getByText('已保存：••••cret')).toBeVisible();
 });
 
+test('settings verifies a saved JEV key in Chromium', async ({
+  context,
+  extensionId,
+  serviceWorker,
+}) => {
+  await seedGrantedSettings(serviceWorker);
+  await serviceWorker.evaluate(() => {
+    const scope = globalThis;
+    scope.fetch = async function receiverSensitiveFetch(this: typeof globalThis) {
+      if (this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'WorkerGlobalScope': Illegal invocation");
+      }
+      return new Response(JSON.stringify({
+        model: 'jev-browser-smoke',
+        answers: {
+          destination: {
+            type: 'choice',
+            choice: 'valid',
+            probabilities: { valid: 0.95, __no_match__: 0.05 },
+            confidence: 0.96,
+          },
+        },
+        usage: { input_tokens: 20, output_tokens: 4 },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+  });
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/options.html`);
+  await page.getByRole('button', { name: '测试连接' }).click();
+
+  await expect(page.getByRole('status')).toHaveText('连接成功');
+});
+
 test('popup completes classification, bookmark move, content capture, and Undo', async ({
   context,
   extensionId,

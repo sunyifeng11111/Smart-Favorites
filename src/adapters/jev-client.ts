@@ -33,7 +33,7 @@ export class HttpJevClient implements JevPort {
   private readonly random: () => number;
 
   constructor(options: HttpJevClientOptions = {}) {
-    this.fetcher = options.fetcher ?? fetch;
+    this.fetcher = options.fetcher ?? globalThis.fetch.bind(globalThis);
     this.delay = options.delay ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
     this.timeoutMs = options.timeoutMs ?? 10_000;
     this.random = options.random ?? Math.random;
