@@ -72,6 +72,19 @@ export function PopupApp() {
 
       {operation?.status === 'classifying' && <p className="status-card">{COPY.classifying}</p>}
 
+      {operation?.status === 'disabled' && (
+        <p className="notice">{COPY.incognitoDisabled}</p>
+      )}
+
+      {operation?.status === 'capture-failed' && (
+        <section className="panel">
+          <p className="notice">{COPY.pageChangedBeforeCapture}</p>
+          <button className="primary" onClick={() => void runCommand({ type: 'START_SMART_SAVE' })}>
+            {COPY.retryClassification}
+          </button>
+        </section>
+      )}
+
       {operation && (
         <details className="panel signals">
           <summary>{COPY.signalTitle}</summary>
@@ -189,6 +202,38 @@ export function PopupApp() {
               </button>
             </>
           )}
+        </section>
+      )}
+
+      {operation?.status === 'pending' && (
+        <section className="panel folder-panel">
+          <h2>{COPY.pendingSavedTitle}</h2>
+          {stateMessage && <p className="notice">{stateMessage}</p>}
+          {operation.recoveryAction === 'choose-folder-manually' && operation.folders.length > 0 && (
+            <>
+              <label htmlFor="pending-folder">{COPY.chooseFolder}</label>
+              <select
+                id="pending-folder"
+                value={selectedFolderId}
+                onChange={(event) => setSelectedFolderId(event.target.value)}
+              >
+                {operation.folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.path}</option>
+                ))}
+              </select>
+              <button className="primary" disabled={!selectedFolderId} onClick={() => confirm(selectedFolderId)}>
+                {COPY.saveHere}
+              </button>
+            </>
+          )}
+          {operation.recoveryAction === 'repair-api-key' && (
+            <button onClick={() => void browser.runtime.openOptionsPage()}>{COPY.openSettings}</button>
+          )}
+          <button
+            onClick={() => void runCommand({ type: 'RETRY_PENDING', operationId: operation.id })}
+          >
+            {COPY.retryClassification}
+          </button>
         </section>
       )}
 

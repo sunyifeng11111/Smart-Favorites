@@ -95,4 +95,110 @@ describe('HttpJevClient', () => {
     expect(error).toMatchObject({ code: 'invalid-response' });
     expect(String(error)).not.toContain('do-not-leak-this');
   });
+
+  it.each([
+    { retryClass: 'network error', first: new TypeError('network offline') },
+    { retryClass: 'HTTP 429', first: new Response('', { status: 429 }) },
+    { retryClass: 'HTTP 529', first: new Response('', { status: 529 }) },
+  ])('retries $retryClass once after exponential backoff with jitter', async ({ first }) => {
+    const fetcher = vi.fn<typeof fetch>()
+      .mockRejectedValueOnce(first)
+      .mockResolvedValueOnce(validResponse());
+    if (first instanceof Response) {
+      fetcher.mockReset();
+      fetcher.mockResolvedValueOnce(first).mockResolvedValueOnce(validResponse());
+    }
+    const delay = vi.fn(async () => undefined);
+    const client = new HttpJevClient({ fetcher, delay, random: () => 0.5 });
+
+    await expect(client.classify(request, 'jev-secret')).resolves.toMatchObject({ choice: '10' });
+
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(delay).toHaveBeenCalledOnce();
+    expect(delay).toHaveBeenCalledWith(375);
+  });
+
+  it.each([
+    { status: 401, code: 'invalid-key' },
+    { status: 422, code: 'invalid-request' },
+  ] as const)('does not retry HTTP $status', async ({ status, code }) => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('', { status }));
+    const delay = vi.fn(async () => undefined);
+    const client = new HttpJevClient({ fetcher, delay });
+
+    const error = await client.classify(request, 'jev-secret').catch((caught) => caught);
+
+    expect(error).toMatchObject({ code });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(delay).not.toHaveBeenCalled();
+  });
+
+  it('does not retry a malformed successful response', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response(JSON.stringify({ answers: { destination: { type: 'text' } } }), {
+        status: 200,
+      }),
+    );
+    const delay = vi.fn(async () => undefined);
+    const client = new HttpJevClient({ fetcher, delay });
+
+    const error = await client.classify(request, 'jev-secret').catch((caught) => caught);
+
+    expect(error).toMatchObject({ code: 'invalid-response' });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(delay).not.toHaveBeenCalled();
+  });
+
+  it('does not retry an unparseable successful response', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+      new Response('{not valid json', { status: 200 }),
+    );
+    const delay = vi.fn(async () => undefined);
+    const client = new HttpJevClient({ fetcher, delay });
+
+    const error = await client.classify(request, 'jev-secret').catch((caught) => caught);
+
+    expect(error).toMatchObject({ code: 'invalid-response' });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(delay).not.toHaveBeenCalled();
+  });
+
+  it('times out each JEV attempt after 10 seconds and retries only once', async () => {
+    vi.useFakeTimers();
+    try {
+      const fetcher = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+      }));
+      const client = new HttpJevClient({
+        fetcher,
+        delay: async () => undefined,
+        random: () => 0,
+      });
+
+      const result = client.classify(request, 'jev-secret').catch((caught) => caught);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      await expect(result).resolves.toMatchObject({ code: 'temporarily-unavailable' });
+      expect(fetcher).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+
+function validResponse(): Response {
+  return new Response(
+    JSON.stringify({
+      answers: {
+        destination: {
+          type: 'choice',
+          choice: '10',
+          probabilities: { '10': 0.8, '11': 0.15, __no_match__: 0.05 },
+          confidence: 0.91,
+        },
+      },
+    }),
+    { status: 200 },
+  );
+}

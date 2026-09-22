@@ -2,6 +2,7 @@ import type { FolderExclusionNode, OperationState } from '../application/types';
 
 export type ExtensionCommand =
   | { type: 'START_SMART_SAVE' }
+  | { type: 'RETRY_PENDING'; operationId: string }
   | { type: 'DECIDE_CONSENT'; operationId: string; granted: boolean }
   | { type: 'CONFIRM_FOLDER'; operationId: string; folderId: string }
   | {

@@ -6,6 +6,8 @@ export interface Settings {
   consent: ConsentDecision;
   apiKey?: string;
   excludedFolderIds: string[];
+  pendingFolderId?: string;
+  pendingFolderCreationToken?: string;
 }
 
 export interface CapturedPage {
@@ -69,10 +71,16 @@ export interface StoredFolderExample {
 export type OperationStatus =
   | 'consent-required'
   | 'classifying'
+  | 'saving-pending'
+  | 'creating-bookmark'
+  | 'moving-pending'
+  | 'capture-failed'
+  | 'disabled'
   | 'duplicate-preserved'
   | 'duplicate-warning'
   | 'manual-selection'
   | 'candidates'
+  | 'pending'
   | 'saved'
   | 'undone';
 
@@ -116,19 +124,48 @@ export interface OperationState {
   candidates: FolderCandidate[];
   duplicateBookmarks: DuplicateBookmarkLocation[];
   createdAt: string;
+  captureCompleted?: boolean;
   messageKey?:
     | 'classificationUnavailable'
+    | 'invalidApiKey'
+    | 'invalidClassificationRequest'
+    | 'malformedClassificationResponse'
+    | 'pageChangedBeforeCapture'
+    | 'incognitoDisabled'
     | 'noEligibleFolders'
+    | 'noMatchingFolder'
     | 'folderSelectionUnavailable'
     | 'bookmarkChangedExternally';
+  recoveryAction?: 'retry' | 'repair-api-key' | 'choose-folder-manually';
   finalBookmarkId?: string;
   finalFolderId?: string;
   finalFolderPath?: string;
-  saveMethod?: 'automatic' | 'confirmed' | 'duplicate-copy' | 'existing-move';
+  saveMethod?: 'automatic' | 'confirmed' | 'duplicate-copy' | 'existing-move' | 'pending';
   duplicateResolution?: 'create-copy' | 'reclassify';
   selectedExistingBookmarkId?: string;
   mutation?: BookmarkMutation;
   pendingFolderExample?: StoredFolderExample;
+  pendingSaveIntent?: {
+    folderId: string;
+    title: string;
+    temporaryTitle: string;
+    url: string;
+    bookmarkId?: string;
+  };
+  bookmarkCreationIntent?: {
+    folderId: string;
+    folderPath: string;
+    saveMethod: NonNullable<OperationState['saveMethod']>;
+    folderExampleSource?: StoredFolderExample['source'];
+    temporaryTitle: string;
+    bookmarkId?: string;
+  };
+  pendingMoveIntent?: {
+    folderId: string;
+    folderPath: string;
+    saveMethod: 'automatic' | 'confirmed';
+    folderExampleSource?: StoredFolderExample['source'];
+  };
 }
 
 export interface JevClassificationRequest {
@@ -150,6 +187,8 @@ export interface PagePort {
 export interface BookmarkPort {
   getTree(): Promise<BookmarkNode[]>;
   create(input: { parentId: string; title: string; url: string }): Promise<BookmarkNode>;
+  createFolderInOtherBookmarks(title: string): Promise<BookmarkNode>;
+  updateTitle(id: string, title: string): Promise<BookmarkNode>;
   move(id: string, destination: { parentId: string; index?: number }): Promise<BookmarkNode>;
   remove(id: string): Promise<void>;
 }
@@ -163,6 +202,8 @@ export interface SmartSaveStoragePort {
   getSettings(): Promise<Settings>;
   saveSettings(settings: Settings): Promise<void>;
   getOperation(id: string): Promise<OperationState | undefined>;
+  getActiveOperation(tabId: number, url: string): Promise<OperationState | undefined>;
+  getInFlightOperations(): Promise<OperationState[]>;
   saveOperation(operation: OperationState): Promise<void>;
   getFolderExamples(): Promise<StoredFolderExample[]>;
   saveFolderExample(example: StoredFolderExample): Promise<void>;

@@ -31,6 +31,27 @@ class FakeBookmarks implements BookmarkPort {
     return structuredClone(bookmark);
   }
 
+  async createFolderInOtherBookmarks(title: string): Promise<BookmarkNode> {
+    const parent = findNode(this.tree, '2');
+    if (!parent) throw new Error('Missing Other Bookmarks root');
+    const folder: BookmarkNode = {
+      id: 'created-folder',
+      parentId: '2',
+      title,
+      children: [],
+    };
+    parent.children ??= [];
+    parent.children.push(folder);
+    return structuredClone(folder);
+  }
+
+  async updateTitle(id: string, title: string): Promise<BookmarkNode> {
+    const node = findNode(this.tree, id);
+    if (!node) throw new Error(`Missing node ${id}`);
+    node.title = title;
+    return structuredClone(node);
+  }
+
   async move(id: string, destination: { parentId: string; index?: number }): Promise<BookmarkNode> {
     const bookmark = removeNode(this.tree, id);
     const parent = findNode(this.tree, destination.parentId);
@@ -66,6 +87,31 @@ class FakeStorage implements SmartSaveStoragePort {
 
   async getOperation(id: string): Promise<OperationState | undefined> {
     return structuredClone(this.operations.get(id));
+  }
+
+  async getActiveOperation(tabId: number, url: string): Promise<OperationState | undefined> {
+    return structuredClone([...this.operations.values()].find(
+      (operation) =>
+        operation.tabId === tabId &&
+        operation.page.url === url &&
+        operation.status !== 'saved' &&
+        operation.status !== 'undone' &&
+        operation.status !== 'duplicate-preserved' &&
+        operation.status !== 'disabled' &&
+        operation.status !== 'capture-failed',
+    ));
+  }
+
+  async getInFlightOperations(): Promise<OperationState[]> {
+    return structuredClone(
+      [...this.operations.values()].filter(
+        ({ status }) =>
+          status === 'classifying' ||
+          status === 'saving-pending' ||
+          status === 'creating-bookmark' ||
+          status === 'moving-pending',
+      ),
+    );
   }
 
   async saveOperation(operation: OperationState): Promise<void> {
@@ -316,12 +362,15 @@ describe('SmartSaveService', () => {
     expect(jevCalls).toBe(0);
   });
 
-  it('falls back to the complete manual picker when intelligent classification fails', async () => {
+  it('preserves the bookmark in the Pending Folder when intelligent classification fails', async () => {
     const bookmarks = new FakeBookmarks([
       {
         id: '0',
         title: '',
-        children: [{ id: '1', parentId: '0', title: '书签栏', children: [] }],
+        children: [
+          { id: '1', parentId: '0', title: '书签栏', children: [] },
+          { id: '2', parentId: '0', title: '其他书签', children: [] },
+        ],
       },
     ]);
     const service = new SmartSaveService({
@@ -345,11 +394,16 @@ describe('SmartSaveService', () => {
     const result = await service.start({ tabId: 42 });
 
     expect(result).toMatchObject({
-      status: 'manual-selection',
+      status: 'pending',
       messageKey: 'classificationUnavailable',
+      recoveryAction: 'retry',
+      finalFolderPath: '待分类',
     });
-    expect(result.folders.map(({ id }) => id)).toEqual(['1']);
+    expect(result.folders.map(({ id }) => id)).toEqual(['1', '2']);
     expect(findNode(bookmarks.snapshot(), '1')?.children).toEqual([]);
+    expect(findNode(bookmarks.snapshot(), result.finalFolderId ?? '')?.children).toEqual([
+      expect.objectContaining({ url: page.url }),
+    ]);
     expect(JSON.stringify(result)).not.toContain('jev-secret');
   });
 

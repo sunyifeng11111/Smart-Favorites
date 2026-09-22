@@ -12,6 +12,7 @@ import type {
 } from '../src/runtime/messages';
 
 export default defineBackground(() => {
+  void createSmartSaveService().resumeInFlightOperations().catch(() => undefined);
   browser.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
     handleCommand(message as ExtensionCommand)
       .then(sendResponse)
@@ -28,6 +29,8 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
     switch (command.type) {
       case 'START_SMART_SAVE':
         return success(await service.start({ tabId: await getActiveTabId() }));
+      case 'RETRY_PENDING':
+        return success(await service.retryPending(command));
       case 'DECIDE_CONSENT':
         return success(await service.decideConsent(command));
       case 'CONFIRM_FOLDER':
@@ -62,6 +65,10 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
         const withoutKey = {
           consent: settings.consent,
           excludedFolderIds: settings.excludedFolderIds,
+          ...(settings.pendingFolderId ? { pendingFolderId: settings.pendingFolderId } : {}),
+          ...(settings.pendingFolderCreationToken
+            ? { pendingFolderCreationToken: settings.pendingFolderCreationToken }
+            : {}),
         };
         await storage.saveSettings(withoutKey);
         return success(await settingsView(withoutKey, service));

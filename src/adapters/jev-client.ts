@@ -60,19 +60,24 @@ export class HttpJevClient implements JevPort {
       try {
         const response = await this.post(body, apiKey);
         if ((response.status === 429 || response.status === 529) && attempt === 0) {
-          await this.delay(250 + Math.floor(this.random() * 250));
+          await this.delay(this.retryDelay(attempt));
           continue;
         }
         if (response.status === 401) throw new JevClientError('invalid-key');
         if (response.status === 422) throw new JevClientError('invalid-request');
         if (!response.ok) throw new JevClientError('temporarily-unavailable');
 
-        const payload: unknown = await response.json();
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          throw new JevClientError('invalid-response');
+        }
         return validateChoiceAnswer(payload, new Set(Object.keys(request.criteria)));
       } catch (error) {
         if (error instanceof JevClientError) throw error;
         if (attempt === 0) {
-          await this.delay(250 + Math.floor(this.random() * 250));
+          await this.delay(this.retryDelay(attempt));
           continue;
         }
         throw new JevClientError('temporarily-unavailable');
@@ -118,6 +123,12 @@ export class HttpJevClient implements JevPort {
     } finally {
       clearTimeout(timeout);
     }
+  }
+
+  private retryDelay(attempt: number): number {
+    const exponentialBackoff = 250 * (2 ** attempt);
+    const jitter = Math.floor(this.random() * 250);
+    return exponentialBackoff + jitter;
   }
 }
 

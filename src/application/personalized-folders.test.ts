@@ -37,6 +37,28 @@ class PersonalizationBookmarks implements BookmarkPort {
     return structuredClone(bookmark);
   }
 
+  async createFolderInOtherBookmarks(title: string): Promise<BookmarkNode> {
+    const parent = findNode(this.tree, '2');
+    if (!parent) throw new Error('Missing Other Bookmarks root');
+    this.createdCount += 1;
+    const folder: BookmarkNode = {
+      id: `created-folder-${this.createdCount}`,
+      parentId: '2',
+      title,
+      children: [],
+    };
+    parent.children ??= [];
+    parent.children.push(folder);
+    return structuredClone(folder);
+  }
+
+  async updateTitle(id: string, title: string): Promise<BookmarkNode> {
+    const node = findNode(this.tree, id);
+    if (!node) throw new Error(`Missing node ${id}`);
+    node.title = title;
+    return structuredClone(node);
+  }
+
   async move(id: string, destination: { parentId: string; index?: number }): Promise<BookmarkNode> {
     const bookmark = detachNode(this.tree, id);
     const parent = findNode(this.tree, destination.parentId);
@@ -80,6 +102,31 @@ class PersonalizationStorage implements SmartSaveStoragePort {
 
   async getOperation(id: string): Promise<OperationState | undefined> {
     return structuredClone(this.operations.get(id));
+  }
+
+  async getActiveOperation(tabId: number, url: string): Promise<OperationState | undefined> {
+    return structuredClone([...this.operations.values()].find(
+      (operation) =>
+        operation.tabId === tabId &&
+        operation.page.url === url &&
+        operation.status !== 'saved' &&
+        operation.status !== 'undone' &&
+        operation.status !== 'duplicate-preserved' &&
+        operation.status !== 'disabled' &&
+        operation.status !== 'capture-failed',
+    ));
+  }
+
+  async getInFlightOperations(): Promise<OperationState[]> {
+    return structuredClone(
+      [...this.operations.values()].filter(
+        ({ status }) =>
+          status === 'classifying' ||
+          status === 'saving-pending' ||
+          status === 'creating-bookmark' ||
+          status === 'moving-pending',
+      ),
+    );
   }
 
   async saveOperation(operation: OperationState): Promise<void> {

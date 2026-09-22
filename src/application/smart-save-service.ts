@@ -16,9 +16,39 @@ import { httpDomain } from '../shared/url';
 
 const AUTOMATIC_CONFIDENCE_THRESHOLD = 0.8;
 const AUTOMATIC_OPTION_PROBABILITY_THRESHOLD = 0.7;
+const PENDING_FOLDER_TITLE = '待分类';
 
 export class SmartSaveService {
   constructor(private readonly ports: SmartSavePorts) {}
+
+  async resumeInFlightOperations(): Promise<OperationState[]> {
+    const operations = await this.ports.storage.getInFlightOperations();
+    return Promise.all(operations.map(({ id }) => this.continueInFlight(id)));
+  }
+
+  async retryPending(command: { operationId: string }): Promise<OperationState> {
+    return this.ports.storage.runOperationExclusive(command.operationId, async () => {
+      const operation = await this.ports.storage.getOperation(command.operationId);
+      if (!operation) throw new Error('Smart Save operation not found');
+      if (operation.status === 'saved') return operation;
+      if (operation.status !== 'pending' || !isPendingOperation(operation)) {
+        throw new Error('Pending Smart Save is not retryable');
+      }
+      const settings = await this.ports.storage.getSettings();
+      const refreshed = await this.refreshEligibleFolders(operation, settings);
+      const retrying: OperationState = {
+        ...refreshed,
+        status: 'classifying',
+      };
+      delete retrying.messageKey;
+      delete retrying.recoveryAction;
+      await this.ports.storage.saveOperation(retrying);
+      if (!settings.apiKey || settings.consent !== 'granted') {
+        return this.saveToPending(retrying, 'classificationUnavailable', 'retry');
+      }
+      return this.classify(retrying, settings.apiKey);
+    });
+  }
 
   async getFolderExclusionTree(): Promise<FolderExclusionNode[]> {
     const [tree, settings] = await Promise.all([
@@ -85,6 +115,7 @@ export class SmartSaveService {
         ...operation,
         status: 'classifying',
         page,
+        captureCompleted: true,
         duplicateResolution: command.action,
         ...(selectedExisting
           ? { selectedExistingBookmarkId: selectedExisting.bookmarkId }
@@ -216,7 +247,11 @@ export class SmartSaveService {
       if (!operation) throw new Error('Smart Save operation not found');
       operation = await this.completePendingFolderExample(operation);
       if (operation.status === 'saved') return operation;
-      if (operation.status !== 'candidates' && operation.status !== 'manual-selection') {
+      if (
+        operation.status !== 'candidates' &&
+        operation.status !== 'manual-selection' &&
+        operation.status !== 'pending'
+      ) {
         throw new Error('Folder confirmation is not available');
       }
       operation = await this.refreshEligibleFolders(
@@ -227,6 +262,14 @@ export class SmartSaveService {
       const folder = operation.folders.find(({ id }) => id === command.folderId);
       if (!folder) return this.stopWithMessage(operation, 'folderSelectionUnavailable');
 
+      if (isPendingOperation(operation)) {
+        return this.movePendingBookmark(
+          operation,
+          folder,
+          'confirmed',
+          'confirmed-save',
+        );
+      }
       if (operation.selectedExistingBookmarkId) {
         return this.moveExistingBookmark(operation, folder);
       }
@@ -241,42 +284,107 @@ export class SmartSaveService {
 
   async start(command: { tabId: number }): Promise<OperationState> {
     const inspectedPage = await this.ports.pages.inspect(command.tabId);
-    const [tree, settings, storedExamples] = await Promise.all([
-      this.ports.bookmarks.getTree(),
-      this.ports.storage.getSettings(),
-      this.ports.storage.getFolderExamples(),
-    ]);
-    const folders = collectEligibleFolders(
-      tree,
-      new Set(settings.excludedFolderIds),
-      storedExamples,
-    );
-    const duplicateBookmarks = findDuplicateBookmarks(tree, inspectedPage.url);
-    const operation: OperationState = {
-      id: this.ports.ids.next(),
-      tabId: command.tabId,
-      status: 'classifying',
-      page: inspectedPage,
-      folders,
-      candidates: [],
-      duplicateBookmarks,
-      createdAt: this.ports.clock.now(),
-    };
-
-    await this.ports.storage.saveOperation(operation);
-
-    if (duplicateBookmarks.length > 0) {
-      const duplicateState: OperationState = { ...operation, status: 'duplicate-warning' };
-      await this.ports.storage.saveOperation(duplicateState);
-      return duplicateState;
+    if (inspectedPage.restrictionReason === 'incognito') {
+      return {
+        id: this.ports.ids.next(),
+        tabId: command.tabId,
+        status: 'disabled',
+        page: inspectedPage,
+        folders: [],
+        candidates: [],
+        duplicateBookmarks: [],
+        createdAt: this.ports.clock.now(),
+        captureCompleted: false,
+        messageKey: 'incognitoDisabled',
+      };
     }
 
-    const page = await this.ports.pages.capture(command.tabId, inspectedPage.url);
-    assertCapturedPageIdentity(inspectedPage.url, page.url);
-    const capturedOperation: OperationState = { ...operation, page };
-    await this.ports.storage.saveOperation(capturedOperation);
+    const pageLockId = `start:${command.tabId}:${inspectedPage.url}`;
+    const initialized = await this.ports.storage.runOperationExclusive(pageLockId, async () => {
+      const inFlight = await this.ports.storage.getActiveOperation(
+        command.tabId,
+        inspectedPage.url,
+      );
+      if (inFlight) return inFlight;
 
-    return this.continueAfterCapture(capturedOperation, settings, true);
+      const [tree, settings, storedExamples] = await Promise.all([
+        this.ports.bookmarks.getTree(),
+        this.ports.storage.getSettings(),
+        this.ports.storage.getFolderExamples(),
+      ]);
+      const folders = collectEligibleFolders(
+        tree,
+        new Set(settings.excludedFolderIds),
+        storedExamples,
+        settings.pendingFolderId,
+      );
+      const duplicateBookmarks = findDuplicateBookmarks(tree, inspectedPage.url);
+      const operation: OperationState = {
+        id: this.ports.ids.next(),
+        tabId: command.tabId,
+        status: duplicateBookmarks.length > 0 ? 'duplicate-warning' : 'classifying',
+        page: inspectedPage,
+        folders,
+        candidates: [],
+        duplicateBookmarks,
+        createdAt: this.ports.clock.now(),
+        captureCompleted: false,
+      };
+      await this.ports.storage.saveOperation(operation);
+      return operation;
+    });
+
+    if (
+      initialized.status !== 'classifying' &&
+      initialized.status !== 'saving-pending' &&
+      initialized.status !== 'creating-bookmark' &&
+      initialized.status !== 'moving-pending'
+    ) {
+      return initialized;
+    }
+
+    return this.continueInFlight(initialized.id);
+  }
+
+  private async continueInFlight(operationId: string): Promise<OperationState> {
+    return this.ports.storage.runOperationExclusive(operationId, async () => {
+      let operation = await this.ports.storage.getOperation(operationId);
+      if (!operation) throw new Error('Smart Save operation not found');
+      if (operation.status === 'saving-pending') {
+        return this.saveToPending(
+          operation,
+          operation.messageKey ?? 'classificationUnavailable',
+          operation.recoveryAction ?? 'retry',
+        );
+      }
+      if (operation.status === 'creating-bookmark') {
+        return this.completeBookmarkCreation(operation);
+      }
+      if (operation.status === 'moving-pending') {
+        return this.completePendingMove(operation);
+      }
+      if (operation.status !== 'classifying') return operation;
+
+      if (!operation.captureCompleted) {
+        try {
+          const page = await this.ports.pages.capture(operation.tabId, operation.page.url);
+          assertCapturedPageIdentity(operation.page.url, page.url);
+          operation = { ...operation, page, captureCompleted: true };
+          await this.ports.storage.saveOperation(operation);
+        } catch {
+          const captureFailed: OperationState = {
+            ...operation,
+            status: 'capture-failed',
+            messageKey: 'pageChangedBeforeCapture',
+            recoveryAction: 'retry',
+          };
+          await this.ports.storage.saveOperation(captureFailed);
+          return captureFailed;
+        }
+      }
+
+      return this.continueAfterCapture(operation);
+    });
   }
 
   private async continueAfterCapture(
@@ -315,6 +423,7 @@ export class SmartSaveService {
       tree,
       new Set(settings.excludedFolderIds),
       storedExamples,
+      settings.pendingFolderId,
     );
     const candidateProbabilities = new Map(
       operation.candidates.map(({ id, probability }) => [id, probability]),
@@ -331,22 +440,38 @@ export class SmartSaveService {
 
   private async classify(operation: OperationState, apiKey: string): Promise<OperationState> {
     if (operation.folders.length === 0) {
-      return this.showManualSelection(operation, 'noEligibleFolders');
+      return this.saveToPending(
+        operation,
+        'noEligibleFolders',
+        'choose-folder-manually',
+      );
     }
 
     const request = buildClassificationRequest(operation.page, operation.folders);
     let result: JevClassificationResult;
     try {
       result = await this.ports.jev.classify(request, apiKey);
-    } catch {
-      return this.showManualSelection(operation, 'classificationUnavailable');
+    } catch (error) {
+      const failure = classificationFailureOutcome(error);
+      return this.saveToPending(operation, failure.messageKey, failure.recoveryAction);
     }
     const currentOperation = await this.refreshEligibleFolders(
       operation,
       await this.ports.storage.getSettings(),
     );
     if (currentOperation.folders.length === 0) {
-      return this.showManualSelection(currentOperation, 'noEligibleFolders');
+      return this.saveToPending(
+        currentOperation,
+        'noEligibleFolders',
+        'choose-folder-manually',
+      );
+    }
+    if (result.choice === NO_MATCH_OPTION) {
+      return this.saveToPending(
+        currentOperation,
+        'noMatchingFolder',
+        'choose-folder-manually',
+      );
     }
     const winningFolder = currentOperation.folders.find(({ id }) => id === result.choice);
     const winningProbability = result.probabilities[result.choice] ?? 0;
@@ -356,6 +481,9 @@ export class SmartSaveService {
       result.confidence >= AUTOMATIC_CONFIDENCE_THRESHOLD &&
       winningProbability >= AUTOMATIC_OPTION_PROBABILITY_THRESHOLD
     ) {
+      if (isPendingOperation(currentOperation)) {
+        return this.movePendingBookmark(currentOperation, winningFolder, 'automatic');
+      }
       return this.createBookmark(
         currentOperation,
         winningFolder,
@@ -383,27 +511,66 @@ export class SmartSaveService {
     saveMethod: NonNullable<OperationState['saveMethod']>,
     folderExampleSource?: StoredFolderExample['source'],
   ): Promise<OperationState> {
-    const bookmark = await this.ports.bookmarks.create({
-      parentId: folder.id,
-      title: operation.page.title,
-      url: operation.page.url,
-    });
+    const creating: OperationState = {
+      ...operation,
+      status: 'creating-bookmark',
+      bookmarkCreationIntent: {
+        folderId: folder.id,
+        folderPath: folder.path,
+        saveMethod,
+        ...(folderExampleSource ? { folderExampleSource } : {}),
+        temporaryTitle: createdBookmarkMarker(operation.id),
+      },
+    };
+    await this.ports.storage.saveOperation(creating);
+    return this.completeBookmarkCreation(creating);
+  }
+
+  private async completeBookmarkCreation(operation: OperationState): Promise<OperationState> {
+    const intent = operation.bookmarkCreationIntent;
+    if (!intent) throw new Error('Bookmark creation intent is missing');
+    const tree = await this.ports.bookmarks.getTree();
+    const destination = findTreeNode(tree, intent.folderId);
+    if (!destination || destination.url != null) {
+      return this.stopWithMessage(operation, 'folderSelectionUnavailable');
+    }
+    let bookmark = intent.bookmarkId
+      ? destination.children?.find(({ id }) => id === intent.bookmarkId)
+      : destination.children?.find(
+          ({ title, url }) =>
+            title === intent.temporaryTitle && url === operation.page.url,
+        );
+    if (!bookmark) {
+      bookmark = await this.ports.bookmarks.create({
+        parentId: intent.folderId,
+        title: intent.temporaryTitle,
+        url: operation.page.url,
+      });
+    }
+    if (intent.bookmarkId !== bookmark.id) {
+      operation.bookmarkCreationIntent = { ...intent, bookmarkId: bookmark.id };
+      await this.ports.storage.saveOperation(operation);
+    }
+    if (bookmark.title !== operation.page.title) {
+      bookmark = await this.ports.bookmarks.updateTitle(bookmark.id, operation.page.title);
+    }
     const savedState: OperationState = {
       ...operation,
       status: 'saved',
       finalBookmarkId: bookmark.id,
-      finalFolderId: folder.id,
-      finalFolderPath: folder.path,
-      saveMethod,
+      finalFolderId: intent.folderId,
+      finalFolderPath: intent.folderPath,
+      saveMethod: intent.saveMethod,
       mutation: {
         kind: 'created',
         bookmarkId: bookmark.id,
         title: bookmark.title,
         url: bookmark.url ?? operation.page.url,
-        currentParentId: bookmark.parentId ?? folder.id,
+        currentParentId: bookmark.parentId ?? intent.folderId,
       },
     };
-    if (!folderExampleSource) {
+    delete savedState.bookmarkCreationIntent;
+    if (!intent.folderExampleSource) {
       await this.ports.storage.saveOperation(savedState);
       return savedState;
     }
@@ -411,8 +578,8 @@ export class SmartSaveService {
       ...savedState,
       pendingFolderExample: this.buildFolderExample(
         savedState,
-        folder.id,
-        folderExampleSource,
+        intent.folderId,
+        intent.folderExampleSource,
       ),
     };
     await this.ports.storage.saveOperation(pending);
@@ -529,6 +696,202 @@ export class SmartSaveService {
     await this.ports.storage.saveOperation(manualState);
     return manualState;
   }
+
+  private async saveToPending(
+    operation: OperationState,
+    messageKey: NonNullable<OperationState['messageKey']>,
+    recoveryAction: NonNullable<OperationState['recoveryAction']>,
+  ): Promise<OperationState> {
+    const { pendingFolder, tree } = await this.ensurePendingFolder(operation.id);
+
+    if (isPendingOperation(operation)) {
+      const current = locateBookmark(tree, operation.mutation.bookmarkId);
+      if (current && matchesExpectedBookmark(current.node, operation.mutation)) {
+        const stillPending: OperationState = {
+          ...operation,
+          status: 'pending',
+          messageKey,
+          recoveryAction,
+          finalFolderId: operation.mutation.currentParentId,
+          finalFolderPath: PENDING_FOLDER_TITLE,
+        };
+        await this.ports.storage.saveOperation(stillPending);
+        return stillPending;
+      }
+    }
+
+    const intent: NonNullable<OperationState['pendingSaveIntent']> =
+      operation.pendingSaveIntent ?? {
+        folderId: pendingFolder.id,
+        title: operation.page.title,
+        temporaryTitle: pendingBookmarkMarker(operation.id),
+        url: operation.page.url,
+      };
+    const saving: OperationState = {
+      ...operation,
+      status: 'saving-pending',
+      messageKey,
+      recoveryAction,
+      finalFolderId: pendingFolder.id,
+      finalFolderPath: PENDING_FOLDER_TITLE,
+      saveMethod: 'pending',
+      pendingSaveIntent: intent,
+    };
+    await this.ports.storage.saveOperation(saving);
+
+    const managedFolder = findTreeNode(tree, pendingFolder.id);
+    let bookmark = intent.bookmarkId
+      ? managedFolder?.children?.find(({ id }) => id === intent.bookmarkId)
+      : managedFolder?.children?.find(
+          ({ title, url }) => title === intent.temporaryTitle && url === intent.url,
+        );
+    if (!bookmark) {
+      bookmark = await this.ports.bookmarks.create({
+        parentId: pendingFolder.id,
+        title: intent.temporaryTitle,
+        url: intent.url,
+      });
+    }
+    if (intent.bookmarkId !== bookmark.id) {
+      saving.pendingSaveIntent = { ...intent, bookmarkId: bookmark.id };
+      await this.ports.storage.saveOperation(saving);
+    }
+    if (bookmark.title !== intent.title) {
+      bookmark = await this.ports.bookmarks.updateTitle(bookmark.id, intent.title);
+    }
+    const pending: OperationState = {
+      ...saving,
+      status: 'pending',
+      finalBookmarkId: bookmark.id,
+      finalFolderId: pendingFolder.id,
+      finalFolderPath: PENDING_FOLDER_TITLE,
+      saveMethod: 'pending',
+      mutation: {
+        kind: 'created',
+        bookmarkId: bookmark.id,
+        title: bookmark.title,
+        url: bookmark.url ?? operation.page.url,
+        currentParentId: bookmark.parentId ?? pendingFolder.id,
+      },
+    };
+    delete pending.pendingSaveIntent;
+    await this.ports.storage.saveOperation(pending);
+    return pending;
+  }
+
+  private async ensurePendingFolder(creationToken: string): Promise<{
+    pendingFolder: BookmarkNode;
+    tree: BookmarkNode[];
+  }> {
+    return this.ports.storage.runOperationExclusive('managed-pending-folder', async () => {
+      let settings = await this.ports.storage.getSettings();
+      const tree = await this.ports.bookmarks.getTree();
+      let pendingFolder = settings.pendingFolderId
+        ? findTreeNode(tree, settings.pendingFolderId)
+        : undefined;
+      if (!pendingFolder || pendingFolder.url != null) {
+        const token = settings.pendingFolderCreationToken ?? creationToken;
+        if (settings.pendingFolderCreationToken !== token) {
+          settings = { ...settings, pendingFolderCreationToken: token };
+          await this.ports.storage.saveSettings(settings);
+        }
+        const markerTitle = pendingFolderMarker(token);
+        pendingFolder = findFolderByTitle(tree, markerTitle)
+          ?? await this.ports.bookmarks.createFolderInOtherBookmarks(markerTitle);
+        settings = {
+          ...settings,
+          pendingFolderId: pendingFolder.id,
+          pendingFolderCreationToken: token,
+        };
+        await this.ports.storage.saveSettings(settings);
+      }
+      if (pendingFolder.title !== PENDING_FOLDER_TITLE) {
+        pendingFolder = await this.ports.bookmarks.updateTitle(
+          pendingFolder.id,
+          PENDING_FOLDER_TITLE,
+        );
+      }
+      const completedSettings = {
+        ...settings,
+        pendingFolderId: pendingFolder.id,
+      };
+      delete completedSettings.pendingFolderCreationToken;
+      await this.ports.storage.saveSettings(completedSettings);
+      return { pendingFolder, tree };
+    });
+  }
+
+  private async movePendingBookmark(
+    operation: OperationState & { mutation: Extract<BookmarkMutation, { kind: 'created' }> },
+    folder: EligibleFolder,
+    saveMethod: 'automatic' | 'confirmed',
+    folderExampleSource?: StoredFolderExample['source'],
+  ): Promise<OperationState> {
+    const moving: OperationState = {
+      ...operation,
+      status: 'moving-pending',
+      pendingMoveIntent: {
+        folderId: folder.id,
+        folderPath: folder.path,
+        saveMethod,
+        ...(folderExampleSource ? { folderExampleSource } : {}),
+      },
+    };
+    await this.ports.storage.saveOperation(moving);
+    return this.completePendingMove(moving);
+  }
+
+  private async completePendingMove(operation: OperationState): Promise<OperationState> {
+    const intent = operation.pendingMoveIntent;
+    if (!intent || operation.mutation?.kind !== 'created') {
+      throw new Error('Pending move intent is missing');
+    }
+    const tree = await this.ports.bookmarks.getTree();
+    const current = locateBookmark(tree, operation.mutation.bookmarkId);
+    const destination = findTreeNode(tree, intent.folderId);
+    if (
+      !current ||
+      !destination ||
+      destination.url != null ||
+      !matchesExpectedBookmarkIdentity(current.node, operation.mutation)
+    ) {
+      return this.stopWithMessage(operation, 'bookmarkChangedExternally');
+    }
+
+    if (current.node.parentId === operation.mutation.currentParentId) {
+      await this.ports.bookmarks.move(operation.mutation.bookmarkId, {
+        parentId: intent.folderId,
+      });
+    } else if (current.node.parentId !== intent.folderId) {
+      return this.stopWithMessage(operation, 'bookmarkChangedExternally');
+    }
+    const saved: OperationState = {
+      ...operation,
+      status: 'saved',
+      finalBookmarkId: operation.mutation.bookmarkId,
+      finalFolderId: intent.folderId,
+      finalFolderPath: intent.folderPath,
+      saveMethod: intent.saveMethod,
+      mutation: { ...operation.mutation, currentParentId: intent.folderId },
+    };
+    delete saved.pendingMoveIntent;
+    delete saved.messageKey;
+    delete saved.recoveryAction;
+    if (intent.folderExampleSource) {
+      const pendingExample: OperationState = {
+        ...saved,
+        pendingFolderExample: this.buildFolderExample(
+          saved,
+          intent.folderId,
+          intent.folderExampleSource,
+        ),
+      };
+      await this.ports.storage.saveOperation(pendingExample);
+      return this.completePendingFolderExample(pendingExample);
+    }
+    await this.ports.storage.saveOperation(saved);
+    return saved;
+  }
 }
 
 function buildClassificationRequest(
@@ -558,13 +921,14 @@ function collectEligibleFolders(
   tree: BookmarkNode[],
   excludedFolderIds: ReadonlySet<string>,
   storedExamples: StoredFolderExample[] = [],
+  pendingFolderId?: string,
 ): EligibleFolder[] {
   const folders: EligibleFolder[] = [];
   const bookmarksById = indexBookmarks(tree);
 
   const visit = (node: BookmarkNode, parentPath: string[], excluded: boolean): void => {
     const isFolder = node.url == null;
-    const isExcluded = excluded || excludedFolderIds.has(node.id);
+    const isExcluded = excluded || excludedFolderIds.has(node.id) || node.id === pendingFolderId;
     const path = node.title ? [...parentPath, node.title] : parentPath;
 
     if (isFolder && node.title && !isExcluded) {
@@ -768,6 +1132,17 @@ function matchesExpectedBookmark(node: BookmarkNode, mutation: BookmarkMutation)
   );
 }
 
+function matchesExpectedBookmarkIdentity(
+  node: BookmarkNode,
+  mutation: BookmarkMutation,
+): boolean {
+  return (
+    node.id === mutation.bookmarkId &&
+    node.title === mutation.title &&
+    node.url === mutation.url
+  );
+}
+
 function findTreeNode(nodes: BookmarkNode[], id: string): BookmarkNode | undefined {
   for (const node of nodes) {
     if (node.id === id) return node;
@@ -777,6 +1152,57 @@ function findTreeNode(nodes: BookmarkNode[], id: string): BookmarkNode | undefin
   return undefined;
 }
 
+function findFolderByTitle(nodes: BookmarkNode[], title: string): BookmarkNode | undefined {
+  for (const node of nodes) {
+    if (node.url == null && node.title === title) return node;
+    const nested = findFolderByTitle(node.children ?? [], title);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
+function pendingFolderMarker(token: string): string {
+  return `${PENDING_FOLDER_TITLE} · Smart Favorites ${token}`;
+}
+
+function pendingBookmarkMarker(operationId: string): string {
+  return `Smart Favorites pending · ${operationId}`;
+}
+
+function createdBookmarkMarker(operationId: string): string {
+  return `Smart Favorites save · ${operationId}`;
+}
+
 function assertCapturedPageIdentity(expectedUrl: string, capturedUrl: string): void {
   if (capturedUrl !== expectedUrl) throw new Error('Page changed before capture completed');
+}
+
+function classificationFailureOutcome(error: unknown): {
+  messageKey: NonNullable<OperationState['messageKey']>;
+  recoveryAction: NonNullable<OperationState['recoveryAction']>;
+} {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? error.code
+    : undefined;
+  if (code === 'invalid-key') {
+    return { messageKey: 'invalidApiKey', recoveryAction: 'repair-api-key' };
+  }
+  if (code === 'invalid-request') {
+    return {
+      messageKey: 'invalidClassificationRequest',
+      recoveryAction: 'choose-folder-manually',
+    };
+  }
+  if (code === 'invalid-response') {
+    return { messageKey: 'malformedClassificationResponse', recoveryAction: 'retry' };
+  }
+  return { messageKey: 'classificationUnavailable', recoveryAction: 'retry' };
+}
+
+function isPendingOperation(
+  operation: OperationState,
+): operation is OperationState & {
+  mutation: Extract<BookmarkMutation, { kind: 'created' }>;
+} {
+  return operation.saveMethod === 'pending' && operation.mutation?.kind === 'created';
 }

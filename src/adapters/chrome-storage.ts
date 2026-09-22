@@ -29,6 +29,12 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
         ? stored.excludedFolderIds.filter((value): value is string => typeof value === 'string')
         : [],
       ...(typeof stored.apiKey === 'string' && stored.apiKey ? { apiKey: stored.apiKey } : {}),
+      ...(typeof stored.pendingFolderId === 'string' && stored.pendingFolderId
+        ? { pendingFolderId: stored.pendingFolderId }
+        : {}),
+      ...(typeof stored.pendingFolderCreationToken === 'string' && stored.pendingFolderCreationToken
+        ? { pendingFolderCreationToken: stored.pendingFolderCreationToken }
+        : {}),
     };
   }
 
@@ -39,6 +45,29 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
   async getOperation(id: string): Promise<OperationState | undefined> {
     const operations = await this.getOperations();
     return operations[id];
+  }
+
+  async getActiveOperation(tabId: number, url: string): Promise<OperationState | undefined> {
+    return Object.values(await this.getOperations()).find(
+      (operation) =>
+        operation.tabId === tabId &&
+        operation.page.url === url &&
+        operation.status !== 'saved' &&
+        operation.status !== 'undone' &&
+        operation.status !== 'duplicate-preserved' &&
+        operation.status !== 'disabled' &&
+        operation.status !== 'capture-failed',
+    );
+  }
+
+  async getInFlightOperations(): Promise<OperationState[]> {
+    return Object.values(await this.getOperations()).filter(
+      (operation) =>
+        operation.status === 'classifying' ||
+        operation.status === 'saving-pending' ||
+        operation.status === 'creating-bookmark' ||
+        operation.status === 'moving-pending',
+    );
   }
 
   async saveOperation(operation: OperationState): Promise<void> {
