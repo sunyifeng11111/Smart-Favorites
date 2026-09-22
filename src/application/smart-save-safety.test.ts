@@ -71,6 +71,7 @@ class SafetyBookmarks implements BookmarkPort {
 class SafetyStorage implements SmartSaveStoragePort {
   private readonly operations = new Map<string, OperationState>();
   readonly corrections: ClassificationCorrection[] = [];
+  private correctionFailuresRemaining = 0;
 
   constructor(private settings: Settings) {}
 
@@ -95,7 +96,24 @@ class SafetyStorage implements SmartSaveStoragePort {
   }
 
   async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
+    if (this.correctionFailuresRemaining > 0) {
+      this.correctionFailuresRemaining -= 1;
+      throw new Error('temporary correction storage failure');
+    }
+    if (
+      this.corrections.some(
+        (stored) =>
+          stored.operationId === correction.operationId &&
+          stored.folderId === correction.folderId,
+      )
+    ) {
+      return;
+    }
     this.corrections.push(structuredClone(correction));
+  }
+
+  failNextCorrection(): void {
+    this.correctionFailuresRemaining = 1;
   }
 }
 
@@ -237,12 +255,21 @@ describe('SmartSaveService mutation safety', () => {
 
     const warning = await service.start({ tabId: 42 });
     const before = bookmarks.snapshot();
+    await expect(
+      service.confirm({ operationId: warning.id, folderId: '10' }),
+    ).rejects.toThrow('Folder confirmation is not available');
+    await expect(
+      service.decideConsent({ operationId: warning.id, granted: true }),
+    ).rejects.toThrow('Consent decision is not available');
     const preserved = await service.resolveDuplicate({
       operationId: warning.id,
       action: 'preserve',
     });
 
     expect(preserved.status).toBe('duplicate-preserved');
+    await expect(
+      service.confirm({ operationId: warning.id, folderId: '10' }),
+    ).rejects.toThrow('Folder confirmation is not available');
     expect(bookmarks.snapshot()).toEqual(before);
     expect(events).toEqual(['tree']);
   });
@@ -289,6 +316,37 @@ describe('SmartSaveService mutation safety', () => {
       }
     },
   );
+
+  it('stops when the tab URL changes between duplicate inspection and page capture', async () => {
+    const events: string[] = [];
+    const bookmarks = new SafetyBookmarks(emptyFolderTree(), events);
+    const service = new SmartSaveService({
+      pages: {
+        inspect: async () => page,
+        capture: async () => ({ ...page, url: 'https://example.com/navigated' }),
+      },
+      bookmarks,
+      jev: {
+        classify: async () => {
+          events.push('jev');
+          throw new Error('JEV must not be called');
+        },
+        testKey: async () => undefined,
+      },
+      storage: new SafetyStorage({
+        consent: 'granted',
+        apiKey: 'jev-secret',
+        excludedFolderIds: [],
+      }),
+      clock: { now: () => '2026-09-22T08:00:00.000Z' },
+      ids: { next: () => 'operation-navigation-race' },
+    });
+
+    await expect(service.start({ tabId: 42 })).rejects.toThrow(
+      'Page changed before capture completed',
+    );
+    expect(events).toEqual(['tree']);
+  });
 
   it('creates an intentional duplicate only after the user explicitly allows a copy', async () => {
     const events: string[] = [];
@@ -416,6 +474,10 @@ describe('SmartSaveService mutation safety', () => {
     });
 
     const automatic = await service.start({ tabId: 42 });
+    storage.failNextCorrection();
+    await expect(
+      service.changeDestination({ operationId: automatic.id, folderId: '11' }),
+    ).rejects.toThrow('temporary correction storage failure');
     const changed = await service.changeDestination({
       operationId: automatic.id,
       folderId: '11',

@@ -71,7 +71,6 @@ export type BookmarkMutation =
       title: string;
       url: string;
       currentParentId: string;
-      undone: boolean;
     }
   | {
       kind: 'moved-existing';
@@ -81,7 +80,6 @@ export type BookmarkMutation =
       originalParentId: string;
       originalIndex: number;
       currentParentId: string;
-      undone: boolean;
     };
 
 export interface ClassificationCorrection {
@@ -113,6 +111,7 @@ export interface OperationState {
   duplicateResolution?: 'create-copy' | 'reclassify';
   selectedExistingBookmarkId?: string;
   mutation?: BookmarkMutation;
+  pendingCorrection?: ClassificationCorrection;
 }
 
 export interface JevClassificationRequest {
@@ -128,7 +127,7 @@ export interface JevClassificationResult {
 
 export interface PagePort {
   inspect(tabId: number): Promise<CapturedPage>;
-  capture(tabId: number): Promise<CapturedPage>;
+  capture(tabId: number, expectedUrl: string): Promise<CapturedPage>;
 }
 
 export interface BookmarkPort {

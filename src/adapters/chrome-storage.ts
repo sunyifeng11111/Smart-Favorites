@@ -41,16 +41,27 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
   }
 
   async saveOperation(operation: OperationState): Promise<void> {
-    const operations = await this.getOperations();
-    operations[operation.id] = operation;
-    await browser.storage.session.set({ [OPERATIONS_KEY]: operations });
+    await navigator.locks.request('smart-favorites-operations', async () => {
+      const operations = await this.getOperations();
+      operations[operation.id] = operation;
+      await browser.storage.session.set({ [OPERATIONS_KEY]: operations });
+    });
   }
 
   async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
-    const stored = (await browser.storage.local.get(CORRECTIONS_KEY))[CORRECTIONS_KEY];
-    const corrections = Array.isArray(stored) ? stored : [];
-    await browser.storage.local.set({
-      [CORRECTIONS_KEY]: [...corrections, correction],
+    await navigator.locks.request('smart-favorites-classification-corrections', async () => {
+      const stored = (await browser.storage.local.get(CORRECTIONS_KEY))[CORRECTIONS_KEY];
+      const corrections = Array.isArray(stored) ? stored : [];
+      const exists = corrections.some(
+        (candidate) =>
+          isRecord(candidate) &&
+          candidate.operationId === correction.operationId &&
+          candidate.folderId === correction.folderId,
+      );
+      if (exists) return;
+      await browser.storage.local.set({
+        [CORRECTIONS_KEY]: [...corrections, correction],
+      });
     });
   }
 

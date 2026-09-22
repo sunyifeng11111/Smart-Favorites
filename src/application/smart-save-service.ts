@@ -47,7 +47,8 @@ export class SmartSaveService {
         throw new Error('Existing Bookmark is not part of this duplicate warning');
       }
 
-      const page = await this.ports.pages.capture(operation.tabId);
+      const page = await this.ports.pages.capture(operation.tabId, operation.page.url);
+      assertCapturedPageIdentity(operation.page.url, page.url);
       const continued: OperationState = {
         ...operation,
         status: 'classifying',
@@ -67,8 +68,9 @@ export class SmartSaveService {
     folderId: string;
   }): Promise<OperationState> {
     return this.ports.storage.runOperationExclusive(command.operationId, async () => {
-      const operation = await this.ports.storage.getOperation(command.operationId);
+      let operation = await this.ports.storage.getOperation(command.operationId);
       if (!operation) throw new Error('Smart Save operation not found');
+      operation = await this.completePendingCorrection(operation);
       if (operation.status === 'undone') return operation;
       if (operation.status !== 'saved' || !operation.mutation) {
         throw new Error('Saved bookmark is not changeable');
@@ -91,22 +93,26 @@ export class SmartSaveService {
 
       await this.ports.bookmarks.move(operation.mutation.bookmarkId, { parentId: folder.id });
       const mutation = { ...operation.mutation, currentParentId: folder.id };
-      const changed: OperationState = {
+      const changedWithoutCorrection: OperationState = {
         ...operation,
         finalFolderId: folder.id,
         finalFolderPath: folder.path,
         mutation,
       };
+      const changed: OperationState = {
+        ...changedWithoutCorrection,
+        pendingCorrection: this.buildCorrection(changedWithoutCorrection, folder.id),
+      };
       await this.ports.storage.saveOperation(changed);
-      await this.recordCorrection(changed, folder.id);
-      return changed;
+      return this.completePendingCorrection(changed);
     });
   }
 
   async undo(command: { operationId: string }): Promise<OperationState> {
     return this.ports.storage.runOperationExclusive(command.operationId, async () => {
-      const operation = await this.ports.storage.getOperation(command.operationId);
+      let operation = await this.ports.storage.getOperation(command.operationId);
       if (!operation) throw new Error('Smart Save operation not found');
+      operation = await this.completePendingCorrection(operation);
       if (operation.status === 'undone') return operation;
       if (operation.status !== 'saved' || !operation.mutation) {
         throw new Error('Smart Save operation cannot be undone');
@@ -136,7 +142,6 @@ export class SmartSaveService {
       const undone: OperationState = {
         ...operation,
         status: 'undone',
-        mutation: { ...operation.mutation, undone: true },
       };
       await this.ports.storage.saveOperation(undone);
       return undone;
@@ -149,6 +154,9 @@ export class SmartSaveService {
   }): Promise<OperationState> {
     const operation = await this.ports.storage.getOperation(command.operationId);
     if (!operation) throw new Error('Smart Save operation not found');
+    if (operation.status !== 'consent-required') {
+      throw new Error('Consent decision is not available');
+    }
 
     const settings = await this.ports.storage.getSettings();
     const updatedSettings = {
@@ -166,9 +174,13 @@ export class SmartSaveService {
 
   async confirm(command: { operationId: string; folderId: string }): Promise<OperationState> {
     return this.ports.storage.runOperationExclusive(command.operationId, async () => {
-      const operation = await this.ports.storage.getOperation(command.operationId);
+      let operation = await this.ports.storage.getOperation(command.operationId);
       if (!operation) throw new Error('Smart Save operation not found');
+      operation = await this.completePendingCorrection(operation);
       if (operation.status === 'saved') return operation;
+      if (operation.status !== 'candidates' && operation.status !== 'manual-selection') {
+        throw new Error('Folder confirmation is not available');
+      }
 
       const folder = operation.folders.find(({ id }) => id === command.folderId);
       if (!folder) throw new Error('Selected folder is not eligible');
@@ -211,7 +223,8 @@ export class SmartSaveService {
       return duplicateState;
     }
 
-    const page = await this.ports.pages.capture(command.tabId);
+    const page = await this.ports.pages.capture(command.tabId, inspectedPage.url);
+    assertCapturedPageIdentity(inspectedPage.url, page.url);
     const capturedOperation: OperationState = { ...operation, page };
     await this.ports.storage.saveOperation(capturedOperation);
 
@@ -302,7 +315,6 @@ export class SmartSaveService {
         title: bookmark.title,
         url: bookmark.url ?? operation.page.url,
         currentParentId: bookmark.parentId ?? folder.id,
-        undone: false,
       },
     };
     await this.ports.storage.saveOperation(savedState);
@@ -333,7 +345,7 @@ export class SmartSaveService {
     }
 
     await this.ports.bookmarks.move(selected.bookmarkId, { parentId: folder.id });
-    const savedState: OperationState = {
+    const savedWithoutCorrection: OperationState = {
       ...operation,
       status: 'saved',
       finalBookmarkId: selected.bookmarkId,
@@ -348,12 +360,14 @@ export class SmartSaveService {
         originalParentId: selected.parentId,
         originalIndex: selected.index,
         currentParentId: folder.id,
-        undone: false,
       },
     };
+    const savedState: OperationState = {
+      ...savedWithoutCorrection,
+      pendingCorrection: this.buildCorrection(savedWithoutCorrection, folder.id),
+    };
     await this.ports.storage.saveOperation(savedState);
-    await this.recordCorrection(savedState, folder.id);
-    return savedState;
+    return this.completePendingCorrection(savedState);
   }
 
   private async stopForExternalChange(operation: OperationState): Promise<OperationState> {
@@ -365,9 +379,12 @@ export class SmartSaveService {
     return stopped;
   }
 
-  private async recordCorrection(operation: OperationState, folderId: string): Promise<void> {
-    if (!operation.finalBookmarkId) return;
-    const correction: ClassificationCorrection = {
+  private buildCorrection(
+    operation: OperationState & { finalBookmarkId?: string },
+    folderId: string,
+  ): ClassificationCorrection {
+    if (!operation.finalBookmarkId) throw new Error('Saved bookmark identity is missing');
+    return {
       operationId: operation.id,
       bookmarkId: operation.finalBookmarkId,
       title: operation.page.title,
@@ -375,7 +392,15 @@ export class SmartSaveService {
       folderId,
       createdAt: this.ports.clock.now(),
     };
-    await this.ports.storage.saveClassificationCorrection(correction);
+  }
+
+  private async completePendingCorrection(operation: OperationState): Promise<OperationState> {
+    if (!operation.pendingCorrection) return operation;
+    await this.ports.storage.saveClassificationCorrection(operation.pendingCorrection);
+    const completed = { ...operation };
+    delete completed.pendingCorrection;
+    await this.ports.storage.saveOperation(completed);
+    return completed;
   }
 
   private async showManualSelection(
@@ -535,4 +560,8 @@ function findTreeNode(nodes: BookmarkNode[], id: string): BookmarkNode | undefin
     if (nested) return nested;
   }
   return undefined;
+}
+
+function assertCapturedPageIdentity(expectedUrl: string, capturedUrl: string): void {
+  if (capturedUrl !== expectedUrl) throw new Error('Page changed before capture completed');
 }
