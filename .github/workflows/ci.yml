@@ -32,6 +32,7 @@ jobs:
           name: smart-favorites-chrome
           path: .output/smart-favorites-*-chrome.zip
           if-no-files-found: error
+          include-hidden-files: true
 
   browser-smoke:
     runs-on: ubuntu-latest
