@@ -7,40 +7,23 @@ import {
 
 describe('private-beta artifacts', () => {
   it('accepts exactly the approved MV3 permissions and JEV host access', () => {
-    expect(() => verifyProductionManifest({
-      manifest_version: 3,
-      permissions: ['bookmarks', 'storage', 'activeTab', 'scripting'],
-      host_permissions: ['https://api.typesafe.ai/*'],
-      background: { service_worker: 'background.js' },
-      action: { default_popup: 'popup.html' },
-      options_ui: { page: 'options.html' },
-    })).not.toThrow();
+    expect(() => verifyProductionManifest(validManifest())).not.toThrow();
   });
 
   it('rejects extra permissions, host access, or missing browser wiring', () => {
-    expect(() => verifyProductionManifest({
-      manifest_version: 3,
+    expect(() => verifyProductionManifest(validManifest({
       permissions: ['bookmarks', 'storage', 'activeTab', 'scripting', 'tabs'],
-      host_permissions: ['https://api.typesafe.ai/*'],
-      background: { service_worker: 'background.js' },
-      action: { default_popup: 'popup.html' },
-      options_ui: { page: 'options.html' },
-    })).toThrow('permissions');
+    }))).toThrow('permissions');
 
-    expect(() => verifyProductionManifest({
-      manifest_version: 3,
-      permissions: ['bookmarks', 'storage', 'activeTab', 'scripting'],
+    expect(() => verifyProductionManifest(validManifest({
       host_permissions: ['<all_urls>'],
-      background: { service_worker: 'background.js' },
-      action: { default_popup: 'popup.html' },
-      options_ui: { page: 'options.html' },
-    })).toThrow('host access');
+    }))).toThrow('host access');
 
-    expect(() => verifyProductionManifest({
-      manifest_version: 3,
-      permissions: ['bookmarks', 'storage', 'activeTab', 'scripting'],
-      host_permissions: ['https://api.typesafe.ai/*'],
-    })).toThrow('browser wiring');
+    expect(() => verifyProductionManifest(validManifest({
+      background: undefined,
+      action: undefined,
+      options_ui: undefined,
+    }))).toThrow('browser wiring');
   });
 
   it('derives the WXT versioned Chrome package name', () => {
@@ -48,3 +31,15 @@ describe('private-beta artifacts', () => {
       .toBe('smart-favorites-0.1.0-chrome.zip');
   });
 });
+
+function validManifest(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    manifest_version: 3,
+    permissions: ['bookmarks', 'storage', 'activeTab', 'scripting'],
+    host_permissions: ['https://api.typesafe.ai/*'],
+    background: { service_worker: 'background.js' },
+    action: { default_popup: 'popup.html' },
+    options_ui: { page: 'options.html' },
+    ...overrides,
+  };
+}
