@@ -18,7 +18,7 @@ describe('capturePageSignals', () => {
           <script>window.secret = 'script secret'</script>
         </head>
         <body>
-          <nav>navigation secret</nav>
+          <nav><h1>hidden navigation heading</h1>navigation secret</nav>
           <main>
             <h1>Primary heading</h1>
             <form>
@@ -29,6 +29,8 @@ describe('capturePageSignals', () => {
             <p aria-hidden="true">aria hidden secret</p>
             <p style="display:none">inline hidden secret</p>
             <p class="css-hidden">stylesheet hidden secret</p>
+            <p style="visibility:collapse">collapsed hidden secret</p>
+            <p style="content-visibility:hidden">content visibility hidden secret</p>
             <p>${longText}</p>
           </main>
         </body>

@@ -80,6 +80,8 @@ export function OptionsApp() {
 
       <section className="card">
         <h2>{COPY.consentSetting}</h2>
+        <p>{COPY.consentIntro}</p>
+        <ul>{COPY.consentItems.map((item) => <li key={item}>{item}</li>)}</ul>
         <p>{settings?.consent === 'granted' ? COPY.consentGranted : settings?.consent === 'declined' ? COPY.consentDeclined : COPY.consentUnknown}</p>
         <div className="button-row">
           <button className="primary" onClick={() => void setConsent(true)}>{COPY.allowConsent}</button>

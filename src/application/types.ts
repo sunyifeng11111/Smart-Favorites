@@ -25,6 +25,12 @@ export interface BookmarkNode {
   title: string;
   url?: string;
   children?: BookmarkNode[];
+  dateAdded?: number;
+}
+
+export interface FolderExample {
+  title: string;
+  domain: string;
 }
 
 export interface EligibleFolder {
@@ -32,6 +38,7 @@ export interface EligibleFolder {
   title: string;
   path: string;
   depth: number;
+  examples: FolderExample[];
 }
 
 export interface FolderCandidate extends EligibleFolder {
@@ -61,7 +68,7 @@ export interface OperationState {
 
 export interface JevClassificationRequest {
   page: Omit<CapturedPage, 'classificationAllowed' | 'restrictionReason'>;
-  criteria: Record<string, string>;
+  criteria: Record<string, string | { path: string; examples: FolderExample[] }>;
 }
 
 export interface JevClassificationResult {

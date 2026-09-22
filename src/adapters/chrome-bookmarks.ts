@@ -18,6 +18,7 @@ function mapBookmarkNode(node: Browser.bookmarks.BookmarkTreeNode): BookmarkNode
     title: node.title,
     ...(node.parentId == null ? {} : { parentId: node.parentId }),
     ...(node.url == null ? {} : { url: node.url }),
+    ...(node.dateAdded == null ? {} : { dateAdded: node.dateAdded }),
     ...(node.children == null ? {} : { children: node.children.map(mapBookmarkNode) }),
   };
 }

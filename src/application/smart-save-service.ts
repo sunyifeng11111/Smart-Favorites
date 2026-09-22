@@ -27,9 +27,7 @@ export class SmartSaveService {
     await this.ports.storage.saveSettings(updatedSettings);
 
     if (!command.granted || !updatedSettings.apiKey || !operation.page.classificationAllowed) {
-      const manualState: OperationState = { ...operation, status: 'manual-selection' };
-      await this.ports.storage.saveOperation(manualState);
-      return manualState;
+      return this.showManualSelection(operation);
     }
 
     return this.classify(operation, updatedSettings.apiKey);
@@ -81,15 +79,12 @@ export class SmartSaveService {
     await this.ports.storage.saveOperation(operation);
 
     if (settings.consent !== 'granted' || !settings.apiKey || !page.classificationAllowed) {
-      const manualState: OperationState = {
-        ...operation,
-        status:
-          page.classificationAllowed && settings.consent === 'unknown'
-            ? 'consent-required'
-            : 'manual-selection',
-      };
-      await this.ports.storage.saveOperation(manualState);
-      return manualState;
+      if (page.classificationAllowed && settings.consent === 'unknown') {
+        const consentState: OperationState = { ...operation, status: 'consent-required' };
+        await this.ports.storage.saveOperation(consentState);
+        return consentState;
+      }
+      return this.showManualSelection(operation);
     }
 
     return this.classify(operation, settings.apiKey);
@@ -97,13 +92,7 @@ export class SmartSaveService {
 
   private async classify(operation: OperationState, apiKey: string): Promise<OperationState> {
     if (operation.folders.length === 0) {
-      const manualState: OperationState = {
-        ...operation,
-        status: 'manual-selection',
-        messageKey: 'noEligibleFolders',
-      };
-      await this.ports.storage.saveOperation(manualState);
-      return manualState;
+      return this.showManualSelection(operation, 'noEligibleFolders');
     }
 
     const request = buildClassificationRequest(operation.page, operation.folders);
@@ -111,13 +100,7 @@ export class SmartSaveService {
     try {
       result = await this.ports.jev.classify(request, apiKey);
     } catch {
-      const manualState: OperationState = {
-        ...operation,
-        status: 'manual-selection',
-        messageKey: 'classificationUnavailable',
-      };
-      await this.ports.storage.saveOperation(manualState);
-      return manualState;
+      return this.showManualSelection(operation, 'classificationUnavailable');
     }
     const candidateState: OperationState = {
       ...operation,
@@ -132,6 +115,19 @@ export class SmartSaveService {
     };
     await this.ports.storage.saveOperation(candidateState);
     return candidateState;
+  }
+
+  private async showManualSelection(
+    operation: OperationState,
+    messageKey?: OperationState['messageKey'],
+  ): Promise<OperationState> {
+    const manualState: OperationState = {
+      ...operation,
+      status: 'manual-selection',
+      ...(messageKey ? { messageKey } : {}),
+    };
+    await this.ports.storage.saveOperation(manualState);
+    return manualState;
   }
 }
 
@@ -149,7 +145,10 @@ function buildClassificationRequest(
       visibleText: page.visibleText,
     },
     criteria: Object.fromEntries([
-      ...folders.map((folder) => [folder.id, folder.path]),
+      ...folders.map((folder) => [
+        folder.id,
+        { path: folder.path, examples: folder.examples },
+      ]),
       [NO_MATCH_OPTION, 'No existing folder is suitable'],
     ]),
   };
@@ -167,7 +166,13 @@ function collectEligibleFolders(
     const path = node.title ? [...parentPath, node.title] : parentPath;
 
     if (isFolder && node.title && !isExcluded) {
-      folders.push({ id: node.id, title: node.title, path: path.join(' / '), depth: path.length });
+      folders.push({
+        id: node.id,
+        title: node.title,
+        path: path.join(' / '),
+        depth: path.length,
+        examples: directBookmarkExamples(node.children ?? []),
+      });
     }
 
     for (const child of node.children ?? []) {
@@ -177,4 +182,23 @@ function collectEligibleFolders(
 
   for (const root of tree) visit(root, [], false);
   return folders;
+}
+
+function directBookmarkExamples(children: BookmarkNode[]) {
+  return children
+    .filter((child): child is BookmarkNode & { url: string } => typeof child.url === 'string')
+    .sort((left, right) => (right.dateAdded ?? 0) - (left.dateAdded ?? 0))
+    .slice(0, 3)
+    .map((bookmark) => ({
+      title: bookmark.title,
+      domain: bookmarkDomain(bookmark.url),
+    }));
+}
+
+function bookmarkDomain(url: string): string {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
 }

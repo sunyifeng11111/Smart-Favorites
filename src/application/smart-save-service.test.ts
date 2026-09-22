@@ -88,7 +88,20 @@ describe('SmartSaveService', () => {
             title: '书签栏',
             children: [
               { id: '10', parentId: '1', title: '开发', children: [] },
-              { id: '11', parentId: '1', title: '设计', children: [] },
+              {
+                id: '11',
+                parentId: '1',
+                title: '设计',
+                children: [
+                  {
+                    id: 'existing-1',
+                    parentId: '11',
+                    title: 'Design reference',
+                    url: 'https://design.example/reference',
+                    dateAdded: 100,
+                  },
+                ],
+              },
             ],
           },
         ],
@@ -125,9 +138,12 @@ describe('SmartSaveService', () => {
 
     expect(requests).toHaveLength(1);
     expect(requests[0]?.criteria).toEqual({
-      '1': '书签栏',
-      '10': '书签栏 / 开发',
-      '11': '书签栏 / 设计',
+      '1': { path: '书签栏', examples: [] },
+      '10': { path: '书签栏 / 开发', examples: [] },
+      '11': {
+        path: '书签栏 / 设计',
+        examples: [{ title: 'Design reference', domain: 'design.example' }],
+      },
       __no_match__: 'No existing folder is suitable',
     });
     expect(result).toMatchObject({
@@ -149,7 +165,7 @@ describe('SmartSaveService', () => {
         parentId: '10',
       }),
     ]);
-    expect(findNode(bookmarks.snapshot(), '11')?.children).toEqual([]);
+    expect(findNode(bookmarks.snapshot(), '11')?.children).toHaveLength(1);
   });
 
   it('shows three ordered Folder Candidates and confirms one destination idempotently', async () => {
