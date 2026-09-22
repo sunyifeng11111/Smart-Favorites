@@ -4,6 +4,14 @@ export type ExtensionCommand =
   | { type: 'START_SMART_SAVE' }
   | { type: 'DECIDE_CONSENT'; operationId: string; granted: boolean }
   | { type: 'CONFIRM_FOLDER'; operationId: string; folderId: string }
+  | {
+      type: 'RESOLVE_DUPLICATE';
+      operationId: string;
+      action: 'preserve' | 'create-copy' | 'reclassify';
+      bookmarkId?: string;
+    }
+  | { type: 'CHANGE_DESTINATION'; operationId: string; folderId: string }
+  | { type: 'UNDO_SMART_SAVE'; operationId: string }
   | { type: 'GET_SETTINGS' }
   | { type: 'SAVE_API_KEY'; apiKey: string }
   | { type: 'TEST_API_KEY'; apiKey?: string }

@@ -30,6 +30,20 @@ class FakeBookmarks implements BookmarkPort {
     return structuredClone(bookmark);
   }
 
+  async move(id: string, destination: { parentId: string; index?: number }): Promise<BookmarkNode> {
+    const bookmark = removeNode(this.tree, id);
+    const parent = findNode(this.tree, destination.parentId);
+    if (!bookmark || !parent) throw new Error('Cannot move bookmark');
+    bookmark.parentId = destination.parentId;
+    parent.children ??= [];
+    parent.children.splice(destination.index ?? parent.children.length, 0, bookmark);
+    return structuredClone(bookmark);
+  }
+
+  async remove(id: string): Promise<void> {
+    if (!removeNode(this.tree, id)) throw new Error('Cannot remove bookmark');
+  }
+
   snapshot(): BookmarkNode[] {
     return structuredClone(this.tree);
   }
@@ -57,6 +71,8 @@ class FakeStorage implements SmartSaveStoragePort {
     this.operations.set(operation.id, structuredClone(operation));
   }
 
+  async saveClassificationCorrection(): Promise<void> {}
+
   async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
     const previous = this.operationQueues.get(id) ?? Promise.resolve();
     const result = previous.then(task);
@@ -76,7 +92,7 @@ const page: CapturedPage = {
 };
 
 describe('SmartSaveService', () => {
-  it('requires confirmation even when JEV confidently selects an Eligible Folder', async () => {
+  it('automatically saves when JEV confidently selects an Eligible Folder', async () => {
     const bookmarks = new FakeBookmarks([
       {
         id: '0',
@@ -114,7 +130,7 @@ describe('SmartSaveService', () => {
         ],
       },
     ]);
-    const pagePort: PagePort = { capture: async () => page };
+    const pagePort: PagePort = { inspect: async () => page, capture: async () => page };
     const requests: JevClassificationRequest[] = [];
     const jev: JevPort = {
       async classify(request): Promise<JevClassificationResult> {
@@ -155,9 +171,12 @@ describe('SmartSaveService', () => {
     });
     expect(result).toMatchObject({
       id: 'operation-1',
-      status: 'candidates',
+      status: 'saved',
+      saveMethod: 'automatic',
     });
-    expect(findNode(bookmarks.snapshot(), '10')?.children).toEqual([]);
+    expect(findNode(bookmarks.snapshot(), '10')?.children).toEqual([
+      expect.objectContaining({ title: page.title, url: page.url, parentId: '10' }),
+    ]);
 
     const saved = await service.confirm({ operationId: result.id, folderId: '10' });
     expect(saved).toMatchObject({
@@ -201,7 +220,7 @@ describe('SmartSaveService', () => {
       excludedFolderIds: [],
     });
     const service = new SmartSaveService({
-      pages: { capture: async () => page },
+      pages: { inspect: async () => page, capture: async () => page },
       bookmarks,
       jev: {
         classify: async () => ({
@@ -265,7 +284,7 @@ describe('SmartSaveService', () => {
     });
     let jevCalls = 0;
     const service = new SmartSaveService({
-      pages: { capture: async () => page },
+      pages: { inspect: async () => page, capture: async () => page },
       bookmarks,
       jev: {
         classify: async () => {
@@ -301,7 +320,7 @@ describe('SmartSaveService', () => {
       },
     ]);
     const service = new SmartSaveService({
-      pages: { capture: async () => page },
+      pages: { inspect: async () => page, capture: async () => page },
       bookmarks,
       jev: {
         classify: async () => {
@@ -340,6 +359,14 @@ describe('SmartSaveService', () => {
     ]);
     const service = new SmartSaveService({
       pages: {
+        inspect: async () => ({
+          ...page,
+          url: 'chrome://settings/',
+          domain: '',
+          visibleText: '',
+          classificationAllowed: false,
+          restrictionReason: 'unsupported-scheme',
+        }),
         capture: async () => ({
           ...page,
           url: 'chrome://settings/',
@@ -378,6 +405,16 @@ function findNode(nodes: BookmarkNode[], id: string): BookmarkNode | undefined {
   for (const node of nodes) {
     if (node.id === id) return node;
     const found = findNode(node.children ?? [], id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function removeNode(nodes: BookmarkNode[], id: string): BookmarkNode | undefined {
+  const index = nodes.findIndex((node) => node.id === id);
+  if (index >= 0) return nodes.splice(index, 1)[0];
+  for (const node of nodes) {
+    const found = removeNode(node.children ?? [], id);
     if (found) return found;
   }
   return undefined;

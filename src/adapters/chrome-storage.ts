@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 
 import type {
+  ClassificationCorrection,
   OperationState,
   Settings,
   SmartSaveStoragePort,
@@ -8,6 +9,7 @@ import type {
 
 const SETTINGS_KEY = 'smartSaveSettings';
 const OPERATIONS_KEY = 'smartSaveOperations';
+const CORRECTIONS_KEY = 'classificationCorrections';
 
 const DEFAULT_SETTINGS: Settings = {
   consent: 'unknown',
@@ -42,6 +44,14 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
     const operations = await this.getOperations();
     operations[operation.id] = operation;
     await browser.storage.session.set({ [OPERATIONS_KEY]: operations });
+  }
+
+  async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
+    const stored = (await browser.storage.local.get(CORRECTIONS_KEY))[CORRECTIONS_KEY];
+    const corrections = Array.isArray(stored) ? stored : [];
+    await browser.storage.local.set({
+      [CORRECTIONS_KEY]: [...corrections, correction],
+    });
   }
 
   async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {

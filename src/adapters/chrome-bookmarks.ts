@@ -10,6 +10,17 @@ export class ChromeBookmarkPort implements BookmarkPort {
   async create(input: { parentId: string; title: string; url: string }): Promise<BookmarkNode> {
     return mapBookmarkNode(await browser.bookmarks.create(input));
   }
+
+  async move(
+    id: string,
+    destination: { parentId: string; index?: number },
+  ): Promise<BookmarkNode> {
+    return mapBookmarkNode(await browser.bookmarks.move(id, destination));
+  }
+
+  async remove(id: string): Promise<void> {
+    await browser.bookmarks.remove(id);
+  }
 }
 
 function mapBookmarkNode(node: Browser.bookmarks.BookmarkTreeNode): BookmarkNode {

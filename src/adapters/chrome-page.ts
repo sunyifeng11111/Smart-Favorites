@@ -5,6 +5,24 @@ import { httpDomain } from '../shared/url';
 import { pageCaptureScript } from './page-capture';
 
 export class ChromePagePort implements PagePort {
+  async inspect(tabId: number): Promise<CapturedPage> {
+    const tab = await browser.tabs.get(tabId);
+    const url = tab.url ?? '';
+    const title = tab.title?.trim() || url;
+
+    if (tab.incognito) return restrictedPage(title, url, 'incognito');
+    if (!/^https?:\/\//i.test(url)) return restrictedPage(title, url, 'unsupported-scheme');
+    return {
+      title,
+      url,
+      domain: httpDomain(url) ?? '',
+      description: '',
+      h1: '',
+      visibleText: '',
+      classificationAllowed: true,
+    };
+  }
+
   async capture(tabId: number): Promise<CapturedPage> {
     const before = await browser.tabs.get(tabId);
     const url = before.url ?? '';

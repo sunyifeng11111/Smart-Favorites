@@ -21,7 +21,11 @@ export function PopupApp() {
       const data = await sendCommand(command);
       if ('status' in data) {
         setOperation(data);
-        if (!selectedFolderId && data.folders[0]) setSelectedFolderId(data.folders[0].id);
+        if (data.status === 'saved' && data.finalFolderId) {
+          setSelectedFolderId(data.finalFolderId);
+        } else if (!selectedFolderId && data.folders[0]) {
+          setSelectedFolderId(data.folders[0].id);
+        }
       }
     } catch (caught) {
       const key = caught instanceof Error ? caught.message : 'genericError';
@@ -32,6 +36,15 @@ export function PopupApp() {
   function confirm(folderId: string) {
     if (!operation) return;
     void runCommand({ type: 'CONFIRM_FOLDER', operationId: operation.id, folderId });
+  }
+
+  function changeDestination() {
+    if (!operation || !selectedFolderId) return;
+    void runCommand({
+      type: 'CHANGE_DESTINATION',
+      operationId: operation.id,
+      folderId: selectedFolderId,
+    });
   }
 
   const stateMessage = operation?.messageKey
@@ -89,6 +102,60 @@ export function PopupApp() {
         </section>
       )}
 
+      {operation?.status === 'duplicate-warning' && (
+        <section className="panel duplicate-warning">
+          <h2>{COPY.duplicateTitle}</h2>
+          <p>{COPY.duplicateIntro}</p>
+          <ul className="duplicate-list">
+            {operation.duplicateBookmarks.map((duplicate) => (
+              <li key={duplicate.bookmarkId}>
+                <strong>{duplicate.folderPath}</strong>
+                <span>{duplicate.title}</span>
+                <button
+                  onClick={() => void runCommand({
+                    type: 'RESOLVE_DUPLICATE',
+                    operationId: operation.id,
+                    action: 'reclassify',
+                    bookmarkId: duplicate.bookmarkId,
+                  })}
+                >
+                  {COPY.reclassifyExisting}
+                </button>
+              </li>
+            ))}
+          </ul>
+          <div className="actions">
+            <button
+              className="primary"
+              onClick={() => void runCommand({
+                type: 'RESOLVE_DUPLICATE',
+                operationId: operation.id,
+                action: 'preserve',
+              })}
+            >
+              {COPY.preserveExisting}
+            </button>
+            <button
+              onClick={() => void runCommand({
+                type: 'RESOLVE_DUPLICATE',
+                operationId: operation.id,
+                action: 'create-copy',
+              })}
+            >
+              {COPY.createAnotherCopy}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {operation?.status === 'duplicate-preserved' && (
+        <section className="panel saved">
+          <div className="success-mark">✓</div>
+          <h2>{COPY.duplicatePreservedTitle}</h2>
+          <p>{COPY.duplicatePreservedBody}</p>
+        </section>
+      )}
+
       {operation?.status === 'candidates' && (
         <section className="panel">
           <h2>{COPY.candidatesTitle}</h2>
@@ -114,7 +181,7 @@ export function PopupApp() {
                 {operation.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
               </select>
               <button className="primary" disabled={!selectedFolderId} onClick={() => confirm(selectedFolderId)}>
-                {COPY.saveHere}
+                {operation.selectedExistingBookmarkId ? COPY.moveExistingHere : COPY.saveHere}
               </button>
             </>
           )}
@@ -124,8 +191,35 @@ export function PopupApp() {
       {operation?.status === 'saved' && (
         <section className="panel saved">
           <div className="success-mark">✓</div>
-          <h2>{COPY.savedTitle}</h2>
+          <h2>{operation.saveMethod === 'automatic' ? COPY.automaticSavedTitle : COPY.savedTitle}</h2>
           <p>{COPY.savedPathPrefix}{operation.finalFolderPath}</p>
+          {stateMessage && <p className="notice">{stateMessage}</p>}
+          <div className="saved-actions">
+            <select
+              aria-label={COPY.chooseFolder}
+              value={selectedFolderId}
+              onChange={(event) => setSelectedFolderId(event.target.value)}
+            >
+              {operation.folders.map((folder) => (
+                <option key={folder.id} value={folder.id}>{folder.path}</option>
+              ))}
+            </select>
+            <button onClick={changeDestination}>{COPY.changeDestination}</button>
+            <button
+              className="danger"
+              onClick={() => void runCommand({ type: 'UNDO_SMART_SAVE', operationId: operation.id })}
+            >
+              {COPY.undo}
+            </button>
+          </div>
+        </section>
+      )}
+
+      {operation?.status === 'undone' && (
+        <section className="panel saved">
+          <div className="success-mark">↶</div>
+          <h2>{COPY.undoneTitle}</h2>
+          <p>{COPY.undoneBody}</p>
         </section>
       )}
 

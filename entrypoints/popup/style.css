@@ -23,6 +23,9 @@ h2 { font-size: 16px; }
 .signals dd { max-height: 120px; margin: 3px 0 0; overflow: auto; overflow-wrap: anywhere; line-height: 1.45; }
 ul { padding-left: 20px; color: #536058; line-height: 1.55; }
 .actions { display: grid; gap: 8px; }
+.duplicate-list { display: grid; gap: 10px; padding: 0; list-style: none; }
+.duplicate-list li { display: grid; gap: 5px; padding: 10px; border-radius: 10px; background: #f6f8f4; }
+.duplicate-list span { color: #667268; overflow-wrap: anywhere; }
 button { cursor: pointer; padding: 10px 12px; border: 1px solid #cbd6cd; border-radius: 10px; background: white; color: #243028; }
 button.primary { border-color: #2b6e49; background: #2b6e49; color: white; }
 button:disabled { cursor: not-allowed; opacity: .5; }
@@ -35,6 +38,8 @@ select { width: 100%; padding: 10px; border: 1px solid #cbd6cd; border-radius: 1
 .notice { color: #6c5431; line-height: 1.45; }
 .notice.error { padding: 10px; border-radius: 10px; background: #fff1ef; color: #a33c30; }
 .saved { text-align: center; }
+.saved-actions { display: grid; gap: 8px; margin-top: 12px; }
+.danger { color: #a33c30; }
 .success-mark { margin: 0 auto 10px; border-radius: 50%; }
 footer { padding-top: 12px; text-align: center; }
 .link-button { padding: 5px; border: 0; background: transparent; color: #2b6e49; text-decoration: underline; }

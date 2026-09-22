@@ -31,6 +31,12 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
         return success(await createSmartSaveService().decideConsent(command));
       case 'CONFIRM_FOLDER':
         return success(await createSmartSaveService().confirm(command));
+      case 'RESOLVE_DUPLICATE':
+        return success(await createSmartSaveService().resolveDuplicate(command));
+      case 'CHANGE_DESTINATION':
+        return success(await createSmartSaveService().changeDestination(command));
+      case 'UNDO_SMART_SAVE':
+        return success(await createSmartSaveService().undo(command));
       case 'GET_SETTINGS':
         return success(settingsView(await storage.getSettings()));
       case 'SAVE_API_KEY': {

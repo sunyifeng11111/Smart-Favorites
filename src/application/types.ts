@@ -48,9 +48,50 @@ export interface FolderCandidate extends EligibleFolder {
 export type OperationStatus =
   | 'consent-required'
   | 'classifying'
+  | 'duplicate-preserved'
+  | 'duplicate-warning'
   | 'manual-selection'
   | 'candidates'
-  | 'saved';
+  | 'saved'
+  | 'undone';
+
+export interface DuplicateBookmarkLocation {
+  bookmarkId: string;
+  parentId: string;
+  index: number;
+  title: string;
+  url: string;
+  folderPath: string;
+}
+
+export type BookmarkMutation =
+  | {
+      kind: 'created';
+      bookmarkId: string;
+      title: string;
+      url: string;
+      currentParentId: string;
+      undone: boolean;
+    }
+  | {
+      kind: 'moved-existing';
+      bookmarkId: string;
+      title: string;
+      url: string;
+      originalParentId: string;
+      originalIndex: number;
+      currentParentId: string;
+      undone: boolean;
+    };
+
+export interface ClassificationCorrection {
+  operationId: string;
+  bookmarkId: string;
+  title: string;
+  domain: string;
+  folderId: string;
+  createdAt: string;
+}
 
 export interface OperationState {
   id: string;
@@ -59,11 +100,19 @@ export interface OperationState {
   page: CapturedPage;
   folders: EligibleFolder[];
   candidates: FolderCandidate[];
+  duplicateBookmarks: DuplicateBookmarkLocation[];
   createdAt: string;
-  messageKey?: 'classificationUnavailable' | 'noEligibleFolders';
+  messageKey?:
+    | 'classificationUnavailable'
+    | 'noEligibleFolders'
+    | 'bookmarkChangedExternally';
   finalBookmarkId?: string;
   finalFolderId?: string;
   finalFolderPath?: string;
+  saveMethod?: 'automatic' | 'confirmed' | 'duplicate-copy' | 'existing-move';
+  duplicateResolution?: 'create-copy' | 'reclassify';
+  selectedExistingBookmarkId?: string;
+  mutation?: BookmarkMutation;
 }
 
 export interface JevClassificationRequest {
@@ -78,12 +127,15 @@ export interface JevClassificationResult {
 }
 
 export interface PagePort {
+  inspect(tabId: number): Promise<CapturedPage>;
   capture(tabId: number): Promise<CapturedPage>;
 }
 
 export interface BookmarkPort {
   getTree(): Promise<BookmarkNode[]>;
   create(input: { parentId: string; title: string; url: string }): Promise<BookmarkNode>;
+  move(id: string, destination: { parentId: string; index?: number }): Promise<BookmarkNode>;
+  remove(id: string): Promise<void>;
 }
 
 export interface JevPort {
@@ -96,6 +148,7 @@ export interface SmartSaveStoragePort {
   saveSettings(settings: Settings): Promise<void>;
   getOperation(id: string): Promise<OperationState | undefined>;
   saveOperation(operation: OperationState): Promise<void>;
+  saveClassificationCorrection(correction: ClassificationCorrection): Promise<void>;
   runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T>;
 }
 
