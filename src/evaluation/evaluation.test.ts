@@ -94,6 +94,15 @@ describe('Evaluation Set runner', () => {
     expect(() => validateEvaluationSet(missingSource as unknown as EvaluationCase[])).toThrow(
       'sourcePageId',
     );
+
+    const emptyFolderIdentity = evaluationCases(100);
+    emptyFolderIdentity[0] = {
+      ...emptyFolderIdentity[0]!,
+      expectedFolderId: '',
+      pendingFolderId: '',
+      eligibleFolders: [],
+    };
+    expect(() => validateEvaluationSet(emptyFolderIdentity)).toThrow('schema');
   });
 });
 

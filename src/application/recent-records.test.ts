@@ -51,8 +51,8 @@ describe('Recent Records', () => {
     const unsafeOperation = operation({
       page: {
         ...operation({}).page,
-        title: 'Authorization: Bearer title-secret api_key=title-key',
-        url: 'https://user:password@example.com/page?api_key=url-key&token=url-token&safe=yes#private',
+        title: 'Authorization: Basic title-secret x-api-key=title-key',
+        url: 'https://user:password@example.com/page?x-api-key=url-key&client_secret=url-token&safe=yes#private',
       },
       status: 'saved',
       finalFolderId: 'folder-a',

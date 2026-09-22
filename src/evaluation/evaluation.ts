@@ -179,11 +179,11 @@ function hasEvaluationCaseShape(value: unknown): value is EvaluationCase {
     return false;
   }
   if (
-    typeof value.id !== 'string' ||
+    !isNonEmptyString(value.id) ||
     (value.language !== 'zh' && value.language !== 'en') ||
     typeof value.labelSource !== 'string' ||
-    typeof value.expectedFolderId !== 'string' ||
-    typeof value.pendingFolderId !== 'string' ||
+    !isNonEmptyString(value.expectedFolderId) ||
+    !isNonEmptyString(value.pendingFolderId) ||
     !hasStringFields(value.page, ['title', 'url', 'domain', 'description', 'h1', 'visibleText'])
   ) {
     return false;
@@ -191,17 +191,16 @@ function hasEvaluationCaseShape(value: unknown): value is EvaluationCase {
   return value.eligibleFolders.every((folder) => {
     if (
       !isRecord(folder) ||
-      typeof folder.id !== 'string' ||
-      typeof folder.path !== 'string' ||
+      !isNonEmptyString(folder.id) ||
+      !isNonEmptyString(folder.path) ||
       !Array.isArray(folder.examples)
     ) {
       return false;
     }
     return folder.examples.every((example) => {
-      return isRecord(example) && hasStringFields(
-        example,
-        ['title', 'domain', 'sourcePageId'],
-      );
+      return isRecord(example) &&
+        hasStringFields(example, ['title', 'domain']) &&
+        isNonEmptyString(example.sourcePageId);
     });
   });
 }
@@ -212,6 +211,10 @@ function folderExampleIdentity(title: string, domain: string): string {
 
 function hasStringFields(value: Record<string, unknown>, fields: string[]): boolean {
   return fields.every((field) => typeof value[field] === 'string');
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

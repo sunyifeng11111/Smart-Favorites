@@ -322,16 +322,24 @@ function redactSensitiveUrl(value: string): string {
 
 function redactSensitiveText(value: string): string {
   return value
-    .replace(/\b(authorization\s*:\s*bearer)\s+[^\s]+/gi, '$1 [REDACTED]')
+    .replace(/\b(authorization\s*:)\s*[^\s]+\s+[^\s]+/gi, '$1 [REDACTED]')
     .replace(
-      /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password)\s*[:=]\s*[^\s&]+/gi,
+      /\b([a-z0-9_-]*(?:api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|token|authorization|secret|password|credential|signature)[a-z0-9_-]*)\s*[:=]\s*[^\s&]+/gi,
       '$1=[REDACTED]',
     );
 }
 
 function isSensitiveName(value: string): boolean {
-  return /^(api[-_]?key|access[-_]?token|refresh[-_]?token|token|authorization|auth|secret|password)$/i
-    .test(value);
+  const normalized = value.toLocaleLowerCase().replace(/[^a-z0-9]/g, '');
+  return normalized === 'auth' || [
+    'apikey',
+    'token',
+    'authorization',
+    'secret',
+    'password',
+    'credential',
+    'signature',
+  ].some((sensitive) => normalized.includes(sensitive));
 }
 
 function isEventKind(value: unknown): value is RecentRecordEventKind {
