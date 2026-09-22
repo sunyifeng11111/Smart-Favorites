@@ -1,69 +1,108 @@
+<div align="center">
+
+<img src="./public/icon/128.png" alt="智能收藏图标" width="88" />
+
 # 智能收藏 / Smart Favorites
 
-智能收藏是一款本地优先的 Chrome Manifest V3 扩展。它读取当前网页的有限信号和用户已有的收藏目录，请 JEV 选择最合适的目录；结果不够可信时由用户确认，没有合适目录或服务失败时则保存到唯一的待分类目录。
+让 Chrome 根据现有书签目录，自动把当前网页收藏到合适的位置。
+
+[![Release](https://img.shields.io/github/v/release/sunyifeng11111/Smart-Favorites?style=flat-square&label=Release)](https://github.com/sunyifeng11111/Smart-Favorites/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/sunyifeng11111/Smart-Favorites/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/sunyifeng11111/Smart-Favorites/actions/workflows/ci.yml)
+![Chrome Extension](https://img.shields.io/badge/Chrome-Extension-4285F4?style=flat-square&logo=googlechrome&logoColor=white)
+![Manifest V3](https://img.shields.io/badge/Manifest-V3-2558C9?style=flat-square)
+![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
+
+[下载最新版本](https://github.com/sunyifeng11111/Smart-Favorites/releases/latest) · [安装](#安装) · [隐私边界](#隐私边界) · [本地开发](#本地开发)
+
+<br />
+
+<img src="./docs/images/smart-favorites-preview.png" alt="智能收藏自动选择书签目录的界面" width="680" />
+
+</div>
+
+智能收藏是一款本地优先的 Chrome 扩展。打开扩展后，它会读取当前网页的有限信号和你已有的书签目录，请 JEV 选择最合适的位置。判断足够可靠时自动收藏，不确定时交给你确认，所有变更都可以更改位置或撤销。
 
 > [!IMPORTANT]
-> 当前版本面向私有 beta。每位测试者必须提供自己的 JEV API 密钥。项目不包含共享开发者密钥、产品后端、账号系统、跨设备同步或远程遥测。
+> 智能分类需要你自己的 JEV API 密钥。项目不包含共享密钥、账号系统、产品后端或远程遥测。
 
-## 核心行为
+## 功能
 
-- 高可信结果可以自动收藏，但会显示最终目录，并允许更改位置或撤销。
-- 不确定结果显示三个候选目录和完整目录选择器。
-- 重复收藏默认不做任何更改；移动历史收藏必须由用户明确确认。
-- JEV 失败、没有匹配目录或没有可分类目录时，收藏会进入扩展管理的待分类目录，稍后可原地重试，不会创建第二份收藏。
-- 设置、目录示例、最近记录和评估数据保留在本机。
+- 根据现有书签目录自动分类，不创建复杂的新目录结构。
+- 展示完整目录路径，支持多层子目录和同名目录。
+- 结果不确定时提供候选目录和完整目录选择器。
+- 自动收藏后可以更改位置或立即撤销。
+- 收藏前检测重复链接，避免无意创建重复记录。
+- 服务失败时保存到待分类目录，稍后可原地重试。
+- 支持排除不参与分类的目录子树。
+- 最近记录只保存在本地，可单条删除、全部清除或手动导出。
+- 自动适配 Chrome 的浅色和深色模式。
 
-## 环境要求
+## 安装
 
-- Node.js 22
-- pnpm 10.17.1
-- Chromium 或 Google Chrome（加载和人工验证扩展）
-- 测试者自己的 JEV API 密钥
+1. 打开 [Releases](https://github.com/sunyifeng11111/Smart-Favorites/releases/latest)，下载 `smart-favorites-<version>-chrome.zip`。
+2. 解压 ZIP 文件。
+3. 在 Chrome 地址栏打开 `chrome://extensions`。
+4. 开启右上角的“开发者模式”。
+5. 点击“加载已解压的扩展程序”，选择包含 `manifest.json` 的解压目录。
+6. 将“智能收藏”固定到浏览器工具栏。
 
-## 安装依赖与本地开发
+> [!NOTE]
+> Chrome 不支持直接安装普通 ZIP。每次下载新版本后，需要解压并重新加载扩展目录。
 
-```bash
-pnpm install --frozen-lockfile
-pnpm dev
-```
+## 使用
 
-WXT 会在 `.output/` 下生成开发扩展。需要验证与发布一致的构建时运行：
+### 1. 连接 JEV
 
-```bash
-pnpm build
-```
+首次使用时打开设置页：
 
-然后在 Chrome 中：
+1. 阅读并允许智能分类所需的数据共享。
+2. 输入自己的 JEV API 密钥并保存。
+3. 点击“测试连接”。
 
-1. 打开 `chrome://extensions`。
-2. 开启“开发者模式”。
-3. 选择“加载已解压的扩展程序”。
-4. 选择 `.output/chrome-mv3`。
-5. 固定“智能收藏”，在一个普通 HTTP/HTTPS 网页上打开扩展。
+密钥保存后输入框会锁定。需要替换时点击“修改密钥”；连接失败时输入框会重新开放。
 
-## API 密钥设置
+### 2. 收藏当前网页
 
-1. 从扩展 popup 打开“设置”。
-2. 阅读本地存储未加密的提示。
-3. 允许 JEV 数据共享。
-4. 输入自己的 JEV API 密钥并保存。
-5. 使用“测试连接”验证密钥。
+在普通 HTTP 或 HTTPS 网页上点击扩展图标：
 
-密钥保存在 `chrome.storage.local`，不会写入日志、最近记录、导出文件或 JEV 请求正文。清除浏览器扩展数据或卸载扩展会移除本地设置。
+- 高可信结果会自动收藏，并显示最终目录。
+- 不确定结果会显示候选目录，由你确认。
+- 没有合适目录或连接失败时，网页会进入待分类目录。
+- 已存在相同链接时，扩展会先提示，不会自动移动历史书签。
 
 ## 隐私边界
 
 智能分类只会向 `https://api.typesafe.ai/*` 发送：
 
-- 当前网页的标题、URL、域名、description、可见 H1，以及最多 4,000 个可见字符；
-- 可分类目录的完整路径；
-- 每个目录最多三个目录示例的标题和域名。
+- 当前网页的标题、URL、域名、description、可见 H1 和最多 4,000 个可见字符。
+- 可分类书签目录的完整路径。
+- 每个目录最多三个示例书签的标题和域名。
 
-表单、输入值、密码字段、脚本、样式、导航和隐藏内容不会被采集。`file:`、`chrome:`、`data:` 等页面不会发送给 JEV；无痕窗口中智能收藏完全停用，也不会写入最近记录。最近记录最多保留 100 条和 30 天，且只在用户明确操作时导出到本地。
+扩展不会采集表单内容、输入值、密码字段、脚本、样式、导航或隐藏内容。`file:`、`chrome:`、`data:` 等页面不会发送给 JEV；无痕窗口中智能收藏完全停用，也不会写入最近记录。
+
+API 密钥、设置和最近记录保存在 `chrome.storage.local`。该存储并未加密，请只在可信设备上使用。卸载扩展或清除扩展数据会删除这些本地信息。
+
+## 本地开发
+
+需要 Node.js 22、pnpm 10.17.1，以及 Chromium 或 Google Chrome。
+
+```bash
+git clone https://github.com/sunyifeng11111/Smart-Favorites.git
+cd Smart-Favorites
+pnpm install --frozen-lockfile
+pnpm dev
+```
+
+WXT 会在 `.output/chrome-mv3/` 生成开发构建，可通过 Chrome 的“加载已解压的扩展程序”载入。
+
+生成生产构建和版本化 ZIP：
+
+```bash
+pnpm build
+pnpm package
+```
 
 ## 质量检查
-
-常用的独立检查：
 
 ```bash
 pnpm compile
@@ -73,93 +112,18 @@ pnpm test:browser
 pnpm package
 ```
 
-`pnpm test:browser` 会先生成生产构建，再让 Playwright 启动兼容的 Chromium 并加载真实扩展。首次运行可能需要安装浏览器：
-
-```bash
-pnpm exec playwright install chromium
-```
-
-浏览器 smoke 覆盖 manifest、popup 到 Service Worker 的消息、设置持久化、动态页面捕获、完整分类/创建/更改目录/撤销、重复收藏警告，以及待分类失败/重试。缺少兼容 Chromium 时测试会失败，不会被标记为通过。
-
-提交 beta 候选前运行完整确定性发布检查：
-
-```bash
-pnpm release:verify
-```
-
-GitHub Actions 会在 push 和 pull request 上分别执行确定性质量检查与必需的 Chromium smoke，并保存解压构建和版本化 ZIP 作为构建产物。
-
-## Evaluation Set 与 beta 准入
-
-真实 Evaluation Set 保存在本机，不应提交到 Git。它必须：
-
-- 至少包含 100 个由人工标注正确目录的页面；
-- 使用精确的 Chrome 目录节点 ID；
-- 标记页面语言为 `zh` 或 `en`；
-- 与目录示例完全隔离，同一网页不得通过不同 ID 伪装成示例；
-- 在无合适目录时把待分类目录 ID 作为正确答案。
-
-结构参考 [`evaluation/evaluation-set.schema.json`](evaluation/evaluation-set.schema.json) 和 [`evaluation/datasets/example.synthetic.json`](evaluation/datasets/example.synthetic.json)。运行真实准入检查：
-
-```bash
-JEV_API_KEY=你的密钥 pnpm evaluate:gate \
-  evaluation/datasets/my-local-set.json \
-  evaluation/results/private-beta-metrics.json
-```
-
-命令会输出中文、英文和整体三个分段的 Top-1、Top-3、自动收藏精确率与自动收藏覆盖率，并写入可选的 JSON 报告。整体 beta 门槛为：
-
-| 指标 | 最低要求 |
-| --- | ---: |
-| Top-1 accuracy | 80% |
-| Top-3 accuracy | 95% |
-| Automatic Save Precision | 95% |
-
-自动收藏覆盖率始终报告但不设最低门槛；若没有任何页面进入自动收藏，精确率不可计算，准入检查会失败。
-
-## 构建私有测试包
-
-先在 `package.json` 中设置本次候选版本，再运行：
-
-```bash
-pnpm package
-```
-
-该命令会生成并验证两种产物：
-
-- `.output/chrome-mv3/`：可直接加载的解压构建；
-- `.output/smart-favorites-<version>-chrome.zip`：供 Chrome Web Store Private testing 使用的版本化 ZIP。
-
-验证会检查 ZIP 非空、关键入口存在，并确认打包后的 manifest 仍然只申请：
-
-- `bookmarks`
-- `storage`
-- `activeTab`
-- `scripting`
-- `https://api.typesafe.ai/*` host access
-
-## Trusted tester 验证清单
-
-仅在 `pnpm release:verify` 和真实 Evaluation Set 的 `pnpm evaluate:gate` 都通过后分发：
-
-- 用全新 Chrome profile 加载解压构建，确认扩展名称、popup 和设置页可打开。
-- 使用测试者自己的密钥完成同意、连接测试和一次普通智能收藏。
-- 验证自动收藏、候选选择、更改目录、撤销、重复收藏、待分类及重试路径。
-- 确认历史收藏不会被自动移动或删除，重试不会生成重复收藏。
-- 在 DevTools Network 中确认扩展没有遥测或产品后端请求，智能分类只访问批准的 JEV host。
-- 检查最近记录的删除、清空和显式导出，并确认导出不含 API 密钥或网页正文。
-- 将版本化 ZIP 上传到 Chrome Web Store 的 Private trusted-tester 渠道；本流程不包含公开商店发布。
+浏览器测试会构建真实 Manifest V3 扩展，并验证设置持久化、网页信号捕获、自动收藏、修改位置、撤销、重复收藏提示及失败重试流程。
 
 ## 项目结构
 
 ```text
-entrypoints/          Chrome Service Worker、popup 和 options 入口
-src/application/      Smart Save 应用服务与领域类型
-src/adapters/         Chrome API、页面捕获与 JEV 适配器
-src/evaluation/       Evaluation Set 计算与 beta gate
-src/release/          manifest 与产物验证
-e2e/                  Playwright 生产扩展 smoke
-evaluation/           schema、示例与本地评估说明
+entrypoints/          Chrome Service Worker、popup 和设置页
+src/application/      智能收藏应用服务与领域逻辑
+src/adapters/         Chrome API、页面捕获与 JEV 客户端
+src/evaluation/       分类质量评估与发布门槛
+src/release/          Manifest 和发布产物验证
+e2e/                  Playwright 扩展集成测试
+evaluation/           评估结构与合成示例
 ```
 
-架构约束与术语见 [`CONTEXT.md`](CONTEXT.md) 和 [`docs/adr/0001-local-first-byok-jev-integration.md`](docs/adr/0001-local-first-byok-jev-integration.md)。
+更完整的架构约束见 [`CONTEXT.md`](CONTEXT.md) 和 [`docs/adr/0001-local-first-byok-jev-integration.md`](docs/adr/0001-local-first-byok-jev-integration.md)。
