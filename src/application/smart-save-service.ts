@@ -8,6 +8,7 @@ import {
   type OperationState,
   type SmartSavePorts,
 } from './types';
+import { httpDomain } from '../shared/url';
 
 export class SmartSaveService {
   constructor(private readonly ports: SmartSavePorts) {}
@@ -188,17 +189,9 @@ function directBookmarkExamples(children: BookmarkNode[]) {
   return children
     .filter((child): child is BookmarkNode & { url: string } => typeof child.url === 'string')
     .sort((left, right) => (right.dateAdded ?? 0) - (left.dateAdded ?? 0))
-    .slice(0, 3)
-    .map((bookmark) => ({
-      title: bookmark.title,
-      domain: bookmarkDomain(bookmark.url),
-    }));
-}
-
-function bookmarkDomain(url: string): string {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
+    .flatMap((bookmark) => {
+      const domain = httpDomain(bookmark.url);
+      return domain == null ? [] : [{ title: bookmark.title, domain }];
+    })
+    .slice(0, 3);
 }

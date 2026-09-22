@@ -100,6 +100,13 @@ describe('SmartSaveService', () => {
                     url: 'https://design.example/reference',
                     dateAdded: 100,
                   },
+                  {
+                    id: 'restricted-existing',
+                    parentId: '11',
+                    title: 'Sensitive local file',
+                    url: 'file:///Users/example/private.html',
+                    dateAdded: 200,
+                  },
                 ],
               },
             ],
@@ -165,7 +172,7 @@ describe('SmartSaveService', () => {
         parentId: '10',
       }),
     ]);
-    expect(findNode(bookmarks.snapshot(), '11')?.children).toHaveLength(1);
+    expect(findNode(bookmarks.snapshot(), '11')?.children).toHaveLength(2);
   });
 
   it('shows three ordered Folder Candidates and confirms one destination idempotently', async () => {

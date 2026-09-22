@@ -1,6 +1,7 @@
 import { browser } from 'wxt/browser';
 
 import type { CapturedPage, PagePort } from '../application/types';
+import { httpDomain } from '../shared/url';
 import { pageCaptureScript } from './page-capture';
 
 export class ChromePagePort implements PagePort {
@@ -51,19 +52,11 @@ function restrictedPage(
   return {
     title,
     url,
-    domain: safeDomain(url),
+    domain: httpDomain(url) ?? '',
     description: '',
     h1: '',
     visibleText: '',
     classificationAllowed: false,
     restrictionReason,
   };
-}
-
-function safeDomain(url: string): string {
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
 }
