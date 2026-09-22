@@ -494,6 +494,45 @@ describe('SmartSaveService mutation safety', () => {
     expect(events.indexOf('jev')).toBeLessThan(events.indexOf('create'));
   });
 
+  it('keeps the Existing Bookmark without creating a Pending duplicate when reclassification fails', async () => {
+    const events: string[] = [];
+    const bookmarks = new SafetyBookmarks(duplicateTree(), events);
+    const service = new SmartSaveService({
+      pages: { inspect: async () => page, capture: async () => page },
+      bookmarks,
+      jev: {
+        classify: async () => {
+          throw new Error('classification unavailable');
+        },
+        testKey: async () => undefined,
+      },
+      storage: new SafetyStorage({
+        consent: 'granted',
+        apiKey: 'jev-secret',
+        excludedFolderIds: [],
+      }),
+      clock: { now: () => '2026-09-22T08:00:00.000Z' },
+      ids: { next: () => 'operation-failed-reclassification' },
+    });
+
+    const warning = await service.start({ tabId: 42 });
+    const result = await service.resolveDuplicate({
+      operationId: warning.id,
+      action: 'reclassify',
+      bookmarkId: 'existing-1',
+    });
+
+    expect(result).toMatchObject({
+      status: 'manual-selection',
+      messageKey: 'classificationUnavailable',
+      selectedExistingBookmarkId: 'existing-1',
+    });
+    expect(findNode(bookmarks.snapshot(), 'existing-1')?.parentId).toBe('10');
+    expect(findNode(bookmarks.snapshot(), '2')?.children).toEqual([]);
+    expect(events).not.toContain('create');
+    expect(events).not.toContain('move');
+  });
+
   it('moves a chosen Existing Bookmark only after destination confirmation and Undo restores its index', async () => {
     const events: string[] = [];
     const bookmarks = new SafetyBookmarks(duplicateTree(), events);
@@ -671,6 +710,7 @@ function duplicateTree(): BookmarkNode[] {
             { id: '11', parentId: '1', title: '阅读', children: [] },
           ],
         },
+        { id: '2', parentId: '0', title: '其他书签', children: [] },
       ],
     },
   ];

@@ -440,7 +440,7 @@ export class SmartSaveService {
 
   private async classify(operation: OperationState, apiKey: string): Promise<OperationState> {
     if (operation.folders.length === 0) {
-      return this.saveToPending(
+      return this.handleClassificationFallback(
         operation,
         'noEligibleFolders',
         'choose-folder-manually',
@@ -453,21 +453,25 @@ export class SmartSaveService {
       result = await this.ports.jev.classify(request, apiKey);
     } catch (error) {
       const failure = classificationFailureOutcome(error);
-      return this.saveToPending(operation, failure.messageKey, failure.recoveryAction);
+      return this.handleClassificationFallback(
+        operation,
+        failure.messageKey,
+        failure.recoveryAction,
+      );
     }
     const currentOperation = await this.refreshEligibleFolders(
       operation,
       await this.ports.storage.getSettings(),
     );
     if (currentOperation.folders.length === 0) {
-      return this.saveToPending(
+      return this.handleClassificationFallback(
         currentOperation,
         'noEligibleFolders',
         'choose-folder-manually',
       );
     }
     if (result.choice === NO_MATCH_OPTION) {
-      return this.saveToPending(
+      return this.handleClassificationFallback(
         currentOperation,
         'noMatchingFolder',
         'choose-folder-manually',
@@ -501,6 +505,17 @@ export class SmartSaveService {
     };
     await this.ports.storage.saveOperation(candidateState);
     return candidateState;
+  }
+
+  private async handleClassificationFallback(
+    operation: OperationState,
+    messageKey: NonNullable<OperationState['messageKey']>,
+    recoveryAction: NonNullable<OperationState['recoveryAction']>,
+  ): Promise<OperationState> {
+    if (operation.selectedExistingBookmarkId) {
+      return this.showManualSelection(operation, messageKey);
+    }
+    return this.saveToPending(operation, messageKey, recoveryAction);
   }
 
   private async createBookmark(
