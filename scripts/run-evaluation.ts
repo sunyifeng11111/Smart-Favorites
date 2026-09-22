@@ -7,10 +7,18 @@ import {
   validateEvaluationSet,
   type EvaluationCase,
 } from '../src/evaluation/evaluation';
+import { BETA_GATE_THRESHOLDS, evaluateBetaGate } from '../src/evaluation/release-gate';
 
-const [datasetPath, outputPath] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const supportedFlags = new Set(['--require-beta-gate']);
+const unknownFlag = args.find((argument) => argument.startsWith('--') && !supportedFlags.has(argument));
+if (unknownFlag) throw new Error(`Unknown option: ${unknownFlag}`);
+const requireBetaGate = args.includes('--require-beta-gate');
+const [datasetPath, outputPath] = args.filter((argument) => !argument.startsWith('--'));
 if (!datasetPath) {
-  throw new Error('Usage: pnpm evaluate <dataset.json> [metrics-report.json]');
+  throw new Error(
+    'Usage: pnpm evaluate[:gate] <dataset.json> [metrics-report.json]',
+  );
 }
 const apiKey = process.env.JEV_API_KEY?.trim();
 if (!apiKey) throw new Error('Set JEV_API_KEY before running an evaluation');
@@ -27,14 +35,24 @@ const { report } = await runEvaluationSet(cases, async (request) => {
     probabilities: result.probabilities,
   };
 });
+const betaGate = evaluateBetaGate(report.full);
 const metricsReport = JSON.stringify({
   generatedAt: new Date().toISOString(),
   datasetSize: cases.length,
-  metrics: report,
+  segments: {
+    chinese: report.zh,
+    english: report.en,
+    overall: report.full,
+  },
+  betaGate: {
+    required: requireBetaGate,
+    thresholds: BETA_GATE_THRESHOLDS,
+    ...betaGate,
+  },
 }, null, 2);
 
 if (outputPath) {
   await writeFile(outputPath, `${metricsReport}\n`, 'utf8');
-} else {
-  process.stdout.write(`${metricsReport}\n`);
 }
+process.stdout.write(`${metricsReport}\n`);
+if (requireBetaGate && !betaGate.passed) process.exitCode = 1;

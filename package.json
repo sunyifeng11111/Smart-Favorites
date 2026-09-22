@@ -8,10 +8,15 @@
     "build": "wxt build -b chrome",
     "compile": "tsc --noEmit",
     "dev": "wxt -b chrome",
-    "evaluate": "tsx scripts/run-evaluation.ts",
+    "evaluate": "node --import tsx scripts/run-evaluation.ts",
+    "evaluate:gate": "node --import tsx scripts/run-evaluation.ts --require-beta-gate",
     "lint": "eslint .",
+    "package": "wxt zip -b chrome && node --import tsx scripts/verify-package.ts",
     "postinstall": "wxt prepare",
+    "pretest:browser": "pnpm build",
+    "release:verify": "pnpm compile && pnpm lint && pnpm test && pnpm test:browser && pnpm package",
     "test": "vitest run",
+    "test:browser": "playwright test",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -22,6 +27,8 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
+    "@types/chrome": "^0.3.0",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.1",

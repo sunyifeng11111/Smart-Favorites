@@ -6,6 +6,7 @@ import {
   type EvaluationCase,
   type EvaluationResult,
 } from './evaluation';
+import { evaluateBetaGate } from './release-gate';
 
 describe('Evaluation Set runner', () => {
   it('calculates exact-folder Top-1, Top-3, Automatic Save Precision, and Coverage by language', () => {
@@ -103,6 +104,52 @@ describe('Evaluation Set runner', () => {
       eligibleFolders: [],
     };
     expect(() => validateEvaluationSet(emptyFolderIdentity)).toThrow('schema');
+  });
+});
+
+describe('private-beta quality gate', () => {
+  it('accepts the documented overall thresholds and always reports coverage', () => {
+    const result = evaluateBetaGate({
+      sampleSize: 100,
+      top1Accuracy: 0.8,
+      top3Accuracy: 0.95,
+      automaticSavePrecision: 0.95,
+      automaticSaveCoverage: 0,
+    });
+
+    expect(result).toEqual({
+      passed: true,
+      failures: [],
+      automaticSaveCoverage: 0,
+    });
+  });
+
+  it('rejects every metric below its threshold and missing Automatic Save Precision', () => {
+    expect(evaluateBetaGate({
+      sampleSize: 100,
+      top1Accuracy: 0.79,
+      top3Accuracy: 0.94,
+      automaticSavePrecision: 0.94,
+      automaticSaveCoverage: 0.42,
+    })).toEqual({
+      passed: false,
+      failures: [
+        'Overall Top-1 accuracy 79.00% is below 80.00%',
+        'Overall Top-3 accuracy 94.00% is below 95.00%',
+        'Automatic Save Precision 94.00% is below 95.00%',
+      ],
+      automaticSaveCoverage: 0.42,
+    });
+
+    expect(evaluateBetaGate({
+      sampleSize: 100,
+      top1Accuracy: 1,
+      top3Accuracy: 1,
+      automaticSavePrecision: null,
+      automaticSaveCoverage: 0,
+    }).failures).toEqual([
+      'Automatic Save Precision is unavailable because no pages qualified for Automatic Save',
+    ]);
   });
 });
 
