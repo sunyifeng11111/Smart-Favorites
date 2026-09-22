@@ -1,0 +1,3 @@
+# Use a local-first, bring-your-own-key JEV integration
+
+The MVP is a closed beta whose users provide their own JEV API key, and the extension calls JEV directly without a product backend, account system, cross-device sync, or remote telemetry. This keeps the first release small and leaves browsing and correction history on the user's device, at the cost of onboarding friction and storing the user's key in unencrypted extension-local storage; a future developer-funded public service will require a deliberate backend, authentication, billing, abuse-control, and migration design rather than embedding a shared key in the extension.
