@@ -1,0 +1,24 @@
+:root {
+  color: #142018;
+  background: #f4f7f3;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input { font: inherit; }
+.settings-shell { width: min(720px, calc(100% - 32px)); margin: 48px auto; }
+header { display: flex; align-items: center; gap: 14px; margin-bottom: 24px; }
+.brand-mark { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 14px; background: #2b6e49; color: white; font-weight: 800; }
+h1, h2, p { margin-top: 0; }
+header h1 { margin-bottom: 2px; }
+header p { margin-bottom: 0; color: #68736b; }
+.card { margin-bottom: 16px; padding: 24px; border: 1px solid #dce4dc; border-radius: 16px; background: white; box-shadow: 0 10px 34px rgba(31, 53, 38, .06); }
+.warning { padding: 12px; border-radius: 10px; background: #fff7e6; color: #6f531c; }
+input { width: 100%; padding: 12px; border: 1px solid #cbd6cd; border-radius: 10px; }
+.button-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+button { cursor: pointer; padding: 10px 14px; border: 1px solid #cbd6cd; border-radius: 10px; background: white; }
+button.primary { border-color: #2b6e49; background: #2b6e49; color: white; }
+button.danger { color: #a33c30; }
+button:disabled { cursor: not-allowed; opacity: .5; }
+.feedback { margin: 14px 0 0; color: #2b6e49; }

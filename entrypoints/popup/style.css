@@ -1,0 +1,35 @@
+:root {
+  color: #142018;
+  background: #f6f8f4;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 390px; }
+button, select, input { font: inherit; }
+.popup-shell { width: 390px; padding: 18px; }
+header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.brand-mark, .success-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: #2b6e49; color: white; font-weight: 800; }
+h1, h2, p { margin-top: 0; }
+h1 { margin-bottom: 2px; font-size: 19px; }
+h2 { font-size: 16px; }
+.page-title { max-width: 295px; margin-bottom: 0; color: #667268; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panel, .status-card { padding: 15px; border: 1px solid #dce4dc; border-radius: 14px; background: white; box-shadow: 0 8px 24px rgba(31, 53, 38, .06); }
+.panel + .panel { margin-top: 12px; }
+ul { padding-left: 20px; color: #536058; line-height: 1.55; }
+.actions { display: grid; gap: 8px; }
+button { cursor: pointer; padding: 10px 12px; border: 1px solid #cbd6cd; border-radius: 10px; background: white; color: #243028; }
+button.primary { border-color: #2b6e49; background: #2b6e49; color: white; }
+button:disabled { cursor: not-allowed; opacity: .5; }
+.candidate-list { display: grid; gap: 8px; }
+.candidate { display: flex; justify-content: space-between; text-align: left; }
+.candidate strong { color: #2b6e49; }
+.folder-panel { display: grid; gap: 9px; }
+.folder-panel h2, .folder-panel p { margin-bottom: 0; }
+select { width: 100%; padding: 10px; border: 1px solid #cbd6cd; border-radius: 10px; background: white; }
+.notice { color: #6c5431; line-height: 1.45; }
+.notice.error { padding: 10px; border-radius: 10px; background: #fff1ef; color: #a33c30; }
+.saved { text-align: center; }
+.success-mark { margin: 0 auto 10px; border-radius: 50%; }
+footer { padding-top: 12px; text-align: center; }
+.link-button { padding: 5px; border: 0; background: transparent; color: #2b6e49; text-decoration: underline; }
