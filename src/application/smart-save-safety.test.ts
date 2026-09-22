@@ -11,6 +11,7 @@ import type {
   PagePort,
   Settings,
   SmartSaveStoragePort,
+  StoredFolderExample,
 } from './types';
 
 class SafetyBookmarks implements BookmarkPort {
@@ -92,14 +93,15 @@ class SafetyStorage implements SmartSaveStoragePort {
     this.operations.set(operation.id, structuredClone(operation));
   }
 
-  async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
-    const previous = this.operationQueues.get(id) ?? Promise.resolve();
-    const result = previous.then(task);
-    this.operationQueues.set(id, result.then(() => undefined, () => undefined));
-    return result;
+  async getFolderExamples(): Promise<StoredFolderExample[]> {
+    return this.corrections.map((correction) => ({
+      ...structuredClone(correction),
+      source: 'classification-correction',
+    }));
   }
 
-  async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
+  async saveFolderExample(example: StoredFolderExample): Promise<void> {
+    if (example.source !== 'classification-correction') return;
     if (this.correctionFailuresRemaining > 0) {
       this.correctionFailuresRemaining -= 1;
       throw new Error('temporary correction storage failure');
@@ -107,13 +109,20 @@ class SafetyStorage implements SmartSaveStoragePort {
     if (
       this.corrections.some(
         (stored) =>
-          stored.operationId === correction.operationId &&
-          stored.folderId === correction.folderId,
+          stored.operationId === example.operationId &&
+          stored.folderId === example.folderId,
       )
     ) {
       return;
     }
-    this.corrections.push(structuredClone(correction));
+    this.corrections.push({ ...structuredClone(example), source: 'classification-correction' });
+  }
+
+  async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.operationQueues.get(id) ?? Promise.resolve();
+    const result = previous.then(task);
+    this.operationQueues.set(id, result.then(() => undefined, () => undefined));
+    return result;
   }
 
   failNextCorrection(): void {
@@ -431,7 +440,8 @@ describe('SmartSaveService mutation safety', () => {
 
     expect(copied).toMatchObject({ status: 'saved', saveMethod: 'duplicate-copy' });
     expect(findNode(bookmarks.snapshot(), '10')?.children).toHaveLength(2);
-    expect(events).toEqual(['tree', 'capture', 'jev', 'create']);
+    expect(events.slice(0, 2)).toEqual(['tree', 'capture']);
+    expect(events.indexOf('jev')).toBeLessThan(events.indexOf('create'));
   });
 
   it('moves a chosen Existing Bookmark only after destination confirmation and Undo restores its index', async () => {

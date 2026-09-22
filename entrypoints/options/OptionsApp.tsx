@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import type { FolderExclusionNode } from '../../src/application/types';
 import type { SettingsView } from '../../src/runtime/messages';
 import { COPY } from '../../src/ui/copy';
 import { sendCommand } from '../../src/ui/send-command';
@@ -51,6 +52,19 @@ export function OptionsApp() {
     if ('hasApiKey' in data) setSettings(data);
   }
 
+  async function setFolderExcluded(folderId: string, excluded: boolean) {
+    try {
+      const data = await sendCommand({
+        type: 'SET_FOLDER_EXCLUSION',
+        folderId,
+        excluded,
+      });
+      if ('hasApiKey' in data) setSettings(data);
+    } catch (error) {
+      setFeedback(messageFor(error));
+    }
+  }
+
   return (
     <main className="settings-shell">
       <header>
@@ -88,7 +102,50 @@ export function OptionsApp() {
           <button onClick={() => void setConsent(false)}>{COPY.declineConsent}</button>
         </div>
       </section>
+
+      <section className="card">
+        <h2>{COPY.folderExclusionsTitle}</h2>
+        <p>{COPY.folderExclusionsIntro}</p>
+        {settings && settings.folderTree.length > 0 ? (
+          <FolderTree
+            nodes={settings.folderTree}
+            onChange={(folderId, excluded) => void setFolderExcluded(folderId, excluded)}
+          />
+        ) : (
+          <p>{COPY.folderTreeEmpty}</p>
+        )}
+      </section>
     </main>
+  );
+}
+
+function FolderTree({
+  nodes,
+  onChange,
+}: {
+  nodes: FolderExclusionNode[];
+  onChange: (folderId: string, excluded: boolean) => void;
+}) {
+  return (
+    <ul className="folder-tree">
+      {nodes.map((node) => (
+        <li key={node.id}>
+          <label>
+            <input
+              type="checkbox"
+              checked={!node.excluded}
+              disabled={node.excludedByAncestor}
+              onChange={(event) => onChange(node.id, !event.target.checked)}
+            />
+            <span className="folder-path">{node.path}</span>
+            <span className="descendant-count">
+              {COPY.folderDescendantCount(node.descendantCount)}
+            </span>
+          </label>
+          {node.children.length > 0 && <FolderTree nodes={node.children} onChange={onChange} />}
+        </li>
+      ))}
+    </ul>
   );
 }
 

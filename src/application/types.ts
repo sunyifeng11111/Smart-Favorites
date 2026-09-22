@@ -45,6 +45,27 @@ export interface FolderCandidate extends EligibleFolder {
   probability: number;
 }
 
+export interface FolderExclusionNode {
+  id: string;
+  title: string;
+  path: string;
+  depth: number;
+  descendantCount: number;
+  excluded: boolean;
+  excludedByAncestor: boolean;
+  children: FolderExclusionNode[];
+}
+
+export interface StoredFolderExample {
+  source: 'classification-correction' | 'confirmed-save';
+  operationId: string;
+  bookmarkId: string;
+  title: string;
+  domain: string;
+  folderId: string;
+  createdAt: string;
+}
+
 export type OperationStatus =
   | 'consent-required'
   | 'classifying'
@@ -82,14 +103,9 @@ export type BookmarkMutation =
       currentParentId: string;
     };
 
-export interface ClassificationCorrection {
-  operationId: string;
-  bookmarkId: string;
-  title: string;
-  domain: string;
-  folderId: string;
-  createdAt: string;
-}
+export type ClassificationCorrection = StoredFolderExample & {
+  source: 'classification-correction';
+};
 
 export interface OperationState {
   id: string;
@@ -103,6 +119,7 @@ export interface OperationState {
   messageKey?:
     | 'classificationUnavailable'
     | 'noEligibleFolders'
+    | 'folderSelectionUnavailable'
     | 'bookmarkChangedExternally';
   finalBookmarkId?: string;
   finalFolderId?: string;
@@ -111,7 +128,7 @@ export interface OperationState {
   duplicateResolution?: 'create-copy' | 'reclassify';
   selectedExistingBookmarkId?: string;
   mutation?: BookmarkMutation;
-  pendingCorrection?: ClassificationCorrection;
+  pendingFolderExample?: StoredFolderExample;
 }
 
 export interface JevClassificationRequest {
@@ -147,7 +164,8 @@ export interface SmartSaveStoragePort {
   saveSettings(settings: Settings): Promise<void>;
   getOperation(id: string): Promise<OperationState | undefined>;
   saveOperation(operation: OperationState): Promise<void>;
-  saveClassificationCorrection(correction: ClassificationCorrection): Promise<void>;
+  getFolderExamples(): Promise<StoredFolderExample[]>;
+  saveFolderExample(example: StoredFolderExample): Promise<void>;
   runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T>;
 }
 

@@ -22,29 +22,30 @@ export default defineBackground(() => {
 
 async function handleCommand(command: ExtensionCommand): Promise<ExtensionResponse> {
   const storage = new ChromeStoragePort();
+  const service = createSmartSaveService();
 
   try {
     switch (command.type) {
       case 'START_SMART_SAVE':
-        return success(await createSmartSaveService().start({ tabId: await getActiveTabId() }));
+        return success(await service.start({ tabId: await getActiveTabId() }));
       case 'DECIDE_CONSENT':
-        return success(await createSmartSaveService().decideConsent(command));
+        return success(await service.decideConsent(command));
       case 'CONFIRM_FOLDER':
-        return success(await createSmartSaveService().confirm(command));
+        return success(await service.confirm(command));
       case 'RESOLVE_DUPLICATE':
-        return success(await createSmartSaveService().resolveDuplicate(command));
+        return success(await service.resolveDuplicate(command));
       case 'CHANGE_DESTINATION':
-        return success(await createSmartSaveService().changeDestination(command));
+        return success(await service.changeDestination(command));
       case 'UNDO_SMART_SAVE':
-        return success(await createSmartSaveService().undo(command));
+        return success(await service.undo(command));
       case 'GET_SETTINGS':
-        return success(settingsView(await storage.getSettings()));
+        return success(await settingsView(await storage.getSettings(), service));
       case 'SAVE_API_KEY': {
         const apiKey = command.apiKey.trim();
         if (!apiKey) return { ok: false, errorKey: 'emptyKey' };
         const settings = await storage.getSettings();
         await storage.saveSettings({ ...settings, apiKey });
-        return success(settingsView({ ...settings, apiKey }));
+        return success(await settingsView({ ...settings, apiKey }, service));
       }
       case 'TEST_API_KEY': {
         const settings = await storage.getSettings();
@@ -63,7 +64,7 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
           excludedFolderIds: settings.excludedFolderIds,
         };
         await storage.saveSettings(withoutKey);
-        return success(settingsView(withoutKey));
+        return success(await settingsView(withoutKey, service));
       }
       case 'SET_CONSENT': {
         const settings = await storage.getSettings();
@@ -72,7 +73,11 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
           consent: command.granted ? ('granted' as const) : ('declined' as const),
         };
         await storage.saveSettings(updated);
-        return success(settingsView(updated));
+        return success(await settingsView(updated, service));
+      }
+      case 'SET_FOLDER_EXCLUSION': {
+        const folderTree = await service.setFolderExcluded(command);
+        return success(await settingsView(await storage.getSettings(), service, folderTree));
       }
     }
   } catch (error) {
@@ -83,12 +88,17 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
   }
 }
 
-function settingsView(settings: Awaited<ReturnType<ChromeStoragePort['getSettings']>>): SettingsView {
+async function settingsView(
+  settings: Awaited<ReturnType<ChromeStoragePort['getSettings']>>,
+  service: ReturnType<typeof createSmartSaveService>,
+  knownFolderTree?: SettingsView['folderTree'],
+): Promise<SettingsView> {
   const apiKey = settings.apiKey ?? '';
   return {
     consent: settings.consent,
     hasApiKey: Boolean(apiKey),
     maskedApiKey: apiKey ? `••••${apiKey.slice(-4)}` : '',
+    folderTree: knownFolderTree ?? await service.getFolderExclusionTree(),
   };
 }
 

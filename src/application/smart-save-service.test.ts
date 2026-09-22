@@ -12,6 +12,7 @@ import type {
   PagePort,
   Settings,
   SmartSaveStoragePort,
+  StoredFolderExample,
 } from './types';
 
 class FakeBookmarks implements BookmarkPort {
@@ -71,7 +72,11 @@ class FakeStorage implements SmartSaveStoragePort {
     this.operations.set(operation.id, structuredClone(operation));
   }
 
-  async saveClassificationCorrection(): Promise<void> {}
+  async getFolderExamples(): Promise<StoredFolderExample[]> {
+    return [];
+  }
+
+  async saveFolderExample(): Promise<void> {}
 
   async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
     const previous = this.operationQueues.get(id) ?? Promise.resolve();

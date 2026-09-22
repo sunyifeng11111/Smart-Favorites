@@ -36,6 +36,7 @@ export const COPY = {
   openSettings: '打开设置',
   classificationUnavailable: '智能分类暂时不可用，仍可手动选择目录。',
   noEligibleFolders: '没有可分类目录。请先在 Chrome 中创建收藏目录。',
+  folderSelectionUnavailable: '目录设置已更新，请从当前可分类目录中重新选择。',
   bookmarkChangedExternally: '收藏已被外部删除或更改。为避免误操作，本次更改或撤销已停止。',
   unsupportedPage: '此页面不会发送给 JEV，请手动选择目录。',
   genericError: '操作未完成，请重试。',
@@ -66,4 +67,8 @@ export const COPY = {
   consentUnknown: '尚未选择',
   allowConsent: '允许',
   declineConsent: '关闭',
+  folderExclusionsTitle: '可分类目录',
+  folderExclusionsIntro: '取消勾选可排除整个目录子树。被父目录排除的子目录仍会显示，但不能单独恢复。',
+  folderDescendantCount: (count: number) => `影响 ${count} 个子目录`,
+  folderTreeEmpty: 'Chrome 中还没有可管理的收藏目录。',
 } as const;

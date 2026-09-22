@@ -21,9 +21,13 @@ export function PopupApp() {
       const data = await sendCommand(command);
       if ('status' in data) {
         setOperation(data);
-        if (data.status === 'saved' && data.finalFolderId) {
+        if (
+          data.status === 'saved' &&
+          data.finalFolderId &&
+          data.folders.some(({ id }) => id === data.finalFolderId)
+        ) {
           setSelectedFolderId(data.finalFolderId);
-        } else if (!selectedFolderId && data.folders[0]) {
+        } else if (!data.folders.some(({ id }) => id === selectedFolderId) && data.folders[0]) {
           setSelectedFolderId(data.folders[0].id);
         }
       }

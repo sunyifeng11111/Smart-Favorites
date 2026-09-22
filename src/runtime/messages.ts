@@ -1,4 +1,4 @@
-import type { OperationState } from '../application/types';
+import type { FolderExclusionNode, OperationState } from '../application/types';
 
 export type ExtensionCommand =
   | { type: 'START_SMART_SAVE' }
@@ -16,12 +16,14 @@ export type ExtensionCommand =
   | { type: 'SAVE_API_KEY'; apiKey: string }
   | { type: 'TEST_API_KEY'; apiKey?: string }
   | { type: 'CLEAR_API_KEY' }
-  | { type: 'SET_CONSENT'; granted: boolean };
+  | { type: 'SET_CONSENT'; granted: boolean }
+  | { type: 'SET_FOLDER_EXCLUSION'; folderId: string; excluded: boolean };
 
 export interface SettingsView {
   consent: 'unknown' | 'granted' | 'declined';
   hasApiKey: boolean;
   maskedApiKey: string;
+  folderTree: FolderExclusionNode[];
 }
 
 export type CommandData = OperationState | SettingsView | { message: 'ok' };

@@ -1,15 +1,16 @@
 import { browser } from 'wxt/browser';
 
 import type {
-  ClassificationCorrection,
   OperationState,
   Settings,
   SmartSaveStoragePort,
+  StoredFolderExample,
 } from '../application/types';
 
 const SETTINGS_KEY = 'smartSaveSettings';
 const OPERATIONS_KEY = 'smartSaveOperations';
 const CORRECTIONS_KEY = 'classificationCorrections';
+const FOLDER_EXAMPLES_KEY = 'folderExamples';
 
 const DEFAULT_SETTINGS: Settings = {
   consent: 'unknown',
@@ -48,19 +49,33 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
     });
   }
 
-  async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
-    await navigator.locks.request('smart-favorites-classification-corrections', async () => {
-      const stored = (await browser.storage.local.get(CORRECTIONS_KEY))[CORRECTIONS_KEY];
-      const corrections = Array.isArray(stored) ? stored : [];
-      const exists = corrections.some(
-        (candidate) =>
-          isRecord(candidate) &&
-          candidate.operationId === correction.operationId &&
-          candidate.folderId === correction.folderId,
-      );
-      if (exists) return;
+  async getFolderExamples(): Promise<StoredFolderExample[]> {
+    const stored = await browser.storage.local.get([FOLDER_EXAMPLES_KEY, CORRECTIONS_KEY]);
+    const examples = Array.isArray(stored[FOLDER_EXAMPLES_KEY])
+      ? stored[FOLDER_EXAMPLES_KEY].flatMap(parseStoredFolderExample)
+      : [];
+    const legacyCorrections = Array.isArray(stored[CORRECTIONS_KEY])
+      ? stored[CORRECTIONS_KEY].flatMap((value) => {
+          const correction = parseFolderExampleFields(value);
+          return correction
+            ? [{ ...correction, source: 'classification-correction' as const }]
+            : [];
+        })
+      : [];
+    const byIdentity = new Map<string, StoredFolderExample>();
+    for (const example of [...legacyCorrections, ...examples]) {
+      byIdentity.set(folderExampleIdentity(example), example);
+    }
+    return [...byIdentity.values()];
+  }
+
+  async saveFolderExample(example: StoredFolderExample): Promise<void> {
+    await navigator.locks.request('smart-favorites-folder-examples', async () => {
+      const stored = await this.getFolderExamples();
+      const identity = folderExampleIdentity(example);
+      if (stored.some((candidate) => folderExampleIdentity(candidate) === identity)) return;
       await browser.storage.local.set({
-        [CORRECTIONS_KEY]: [...corrections, correction],
+        [FOLDER_EXAMPLES_KEY]: [...stored, example],
       });
     });
   }
@@ -77,4 +92,44 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function parseStoredFolderExample(value: unknown): StoredFolderExample[] {
+  if (!isRecord(value)) return [];
+  if (
+    value.source !== 'classification-correction' &&
+    value.source !== 'confirmed-save'
+  ) {
+    return [];
+  }
+  const fields = parseFolderExampleFields(value);
+  return fields ? [{ ...fields, source: value.source }] : [];
+}
+
+function parseFolderExampleFields(
+  value: unknown,
+): Omit<StoredFolderExample, 'source'> | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.operationId !== 'string' ||
+    typeof value.bookmarkId !== 'string' ||
+    typeof value.title !== 'string' ||
+    typeof value.domain !== 'string' ||
+    typeof value.folderId !== 'string' ||
+    typeof value.createdAt !== 'string'
+  ) {
+    return undefined;
+  }
+  return {
+    operationId: value.operationId,
+    bookmarkId: value.bookmarkId,
+    title: value.title,
+    domain: value.domain,
+    folderId: value.folderId,
+    createdAt: value.createdAt,
+  };
+}
+
+function folderExampleIdentity(example: StoredFolderExample): string {
+  return `${example.source}:${example.operationId}:${example.folderId}`;
 }
