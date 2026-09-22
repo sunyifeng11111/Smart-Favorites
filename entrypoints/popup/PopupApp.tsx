@@ -51,6 +51,11 @@ export function PopupApp() {
     });
   }
 
+  function undo() {
+    if (!operation) return;
+    void runCommand({ type: 'UNDO_SMART_SAVE', operationId: operation.id });
+  }
+
   function openRecentRecords() {
     const url = browser.runtime.getURL('/options.html#recent-records');
     void browser.tabs.create({ url });
@@ -239,6 +244,12 @@ export function PopupApp() {
           >
             {COPY.retryClassification}
           </button>
+          <button
+            className="danger"
+            onClick={undo}
+          >
+            {COPY.undo}
+          </button>
         </section>
       )}
 
@@ -259,10 +270,7 @@ export function PopupApp() {
               ))}
             </select>
             <button onClick={changeDestination}>{COPY.changeDestination}</button>
-            <button
-              className="danger"
-              onClick={() => void runCommand({ type: 'UNDO_SMART_SAVE', operationId: operation.id })}
-            >
+            <button className="danger" onClick={undo}>
               {COPY.undo}
             </button>
           </div>

@@ -223,6 +223,79 @@ describe('SmartSaveService durability', () => {
 
   it.each([
     {
+      name: 'classification consent has not been granted',
+      settings: { consent: 'unknown' as const, apiKey: 'jev-secret' },
+    },
+    {
+      name: 'the API key is missing',
+      settings: { consent: 'granted' as const },
+    },
+  ])('saves directly to the Pending Folder when there are no Eligible Folders and $name', async ({ settings }) => {
+    const bookmarks = new DurableBookmarks(bookmarkTree());
+    const storage = new DurableStorage({
+      ...settings,
+      excludedFolderIds: ['1', '2'],
+    });
+    let jevCalls = 0;
+    const service = createService({
+      bookmarks,
+      storage,
+      pages: pagesByTab(),
+      ids: { next: () => 'operation-no-folders-no-classification' },
+      jev: {
+        classify: async () => {
+          jevCalls += 1;
+          throw new Error('JEV must not be called');
+        },
+        testKey: async () => undefined,
+      },
+    });
+
+    const result = await service.start({ tabId: 1 });
+
+    expect(result).toMatchObject({
+      status: 'pending',
+      messageKey: 'noEligibleFolders',
+      recoveryAction: 'choose-folder-manually',
+      saveMethod: 'pending',
+      mutation: { kind: 'created' },
+    });
+    expect(jevCalls).toBe(0);
+    expect(findNode(bookmarks.snapshot(), result.finalFolderId ?? '')?.children).toEqual([
+      expect.objectContaining({ id: result.finalBookmarkId, url: basePage.url }),
+    ]);
+  });
+
+  it('undoes the bookmark created in the Pending Folder when classification is unavailable', async () => {
+    const bookmarks = new DurableBookmarks(bookmarkTree());
+    const service = createService({
+      bookmarks,
+      storage: new DurableStorage({
+        consent: 'granted',
+        excludedFolderIds: ['1', '2'],
+      }),
+      pages: pagesByTab(),
+      ids: { next: () => 'operation-pending-undo' },
+      jev: {
+        classify: async () => {
+          throw new Error('JEV must not be called');
+        },
+        testKey: async () => undefined,
+      },
+    });
+
+    const pending = await service.start({ tabId: 1 });
+    const undone = await service.undo({ operationId: pending.id });
+    const repeated = await service.undo({ operationId: pending.id });
+
+    expect(pending.status).toBe('pending');
+    expect(undone.status).toBe('undone');
+    expect(repeated).toEqual(undone);
+    expect(findBookmarksByUrl(bookmarks.snapshot(), basePage.url)).toEqual([]);
+  });
+
+  it.each([
+    {
       name: 'there are no Eligible Folders',
       excludedFolderIds: ['1', '2'],
       jev: {

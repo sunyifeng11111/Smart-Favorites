@@ -178,7 +178,10 @@ export class SmartSaveService {
       if (!operation) throw new Error('Smart Save operation not found');
       operation = await this.completePendingFolderExample(operation);
       if (operation.status === 'undone') return operation;
-      if (operation.status !== 'saved' || !operation.mutation) {
+      if (
+        (operation.status !== 'saved' && !isPendingOperation(operation)) ||
+        !operation.mutation
+      ) {
         throw new Error('Smart Save operation cannot be undone');
       }
 
@@ -396,6 +399,13 @@ export class SmartSaveService {
     const currentOperation = foldersAreFresh
       ? operation
       : await this.refreshEligibleFolders(operation, settings);
+    if (currentOperation.folders.length === 0) {
+      return this.handleClassificationFallback(
+        currentOperation,
+        'noEligibleFolders',
+        'choose-folder-manually',
+      );
+    }
     if (
       settings.consent !== 'granted' ||
       !settings.apiKey ||
