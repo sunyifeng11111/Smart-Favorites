@@ -44,6 +44,10 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
     await browser.storage.session.set({ [OPERATIONS_KEY]: operations });
   }
 
+  async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
+    return navigator.locks.request(`smart-favorites-operation:${id}`, task);
+  }
+
   private async getOperations(): Promise<Record<string, OperationState>> {
     const stored = (await browser.storage.session.get(OPERATIONS_KEY))[OPERATIONS_KEY];
     return isRecord(stored) ? (stored as Record<string, OperationState>) : {};

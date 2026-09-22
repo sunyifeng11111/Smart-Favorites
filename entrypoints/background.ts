@@ -42,6 +42,9 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
       }
       case 'TEST_API_KEY': {
         const settings = await storage.getSettings();
+        if (settings.consent !== 'granted') {
+          return { ok: false, errorKey: 'consentRequiredForTest' };
+        }
         const apiKey = command.apiKey?.trim() || settings.apiKey;
         if (!apiKey) return { ok: false, errorKey: 'emptyKey' };
         await new HttpJevClient().testKey(apiKey);

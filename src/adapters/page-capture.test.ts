@@ -1,9 +1,11 @@
 import { parseHTML } from 'linkedom';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { capturePageSignals } from './page-capture';
+import { pageCaptureScript } from './page-capture';
 
 describe('capturePageSignals', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it('captures bounded safe visible signals and excludes form, navigation, code, and hidden text', () => {
     const longText = 'A'.repeat(4_200);
     const { document } = parseHTML(`
@@ -12,14 +14,13 @@ describe('capturePageSignals', () => {
         <head>
           <title>Safe page</title>
           <meta name="description" content="A safe description">
-          <style>.secret { display: block }</style>
+          <style>.css-hidden { display: none }</style>
           <script>window.secret = 'script secret'</script>
         </head>
         <body>
           <nav>navigation secret</nav>
           <main>
             <h1>Primary heading</h1>
-            <p>${longText}</p>
             <form>
               <label>Password <input type="password" value="password secret"></label>
               form secret
@@ -27,12 +28,20 @@ describe('capturePageSignals', () => {
             <p hidden>hidden attribute secret</p>
             <p aria-hidden="true">aria hidden secret</p>
             <p style="display:none">inline hidden secret</p>
+            <p class="css-hidden">stylesheet hidden secret</p>
+            <p>${longText}</p>
           </main>
         </body>
       </html>
     `);
 
-    const result = capturePageSignals(document, 'https://Example.COM:443/path?q=1#part');
+    vi.stubGlobal('getComputedStyle', (element: Element) => ({
+      display: element.classList.contains('css-hidden') ? 'none' : 'block',
+      visibility: 'visible',
+      opacity: '1',
+    }));
+
+    const result = pageCaptureScript('https://Example.COM:443/path?q=1#part', document);
 
     expect(result).toMatchObject({
       title: 'Safe page',

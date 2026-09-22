@@ -20,4 +20,7 @@ export type CommandData = OperationState | SettingsView | { message: 'ok' };
 
 export type ExtensionResponse =
   | { ok: true; data: CommandData }
-  | { ok: false; errorKey: 'genericError' | 'keyInvalid' | 'emptyKey' };
+  | {
+      ok: false;
+      errorKey: 'genericError' | 'keyInvalid' | 'emptyKey' | 'consentRequiredForTest';
+    };

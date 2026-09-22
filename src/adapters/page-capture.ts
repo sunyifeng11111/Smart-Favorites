@@ -1,15 +1,23 @@
 import type { CapturedPage } from '../application/types';
 
-export function capturePageSignals(document: Document, url: string): CapturedPage {
-  return pageCaptureScript(url, document);
-}
-
 export function pageCaptureScript(url: string, documentOverride?: Document): CapturedPage {
   const source = documentOverride ?? document;
   const root = source.querySelector('article') ?? source.querySelector('main') ?? source.body;
   const safeRoot = root?.cloneNode(true) as Element | null;
 
-  if (safeRoot) {
+  if (root && safeRoot) {
+    const sourceElements = [root, ...root.querySelectorAll('*')];
+    const safeElements = [safeRoot, ...safeRoot.querySelectorAll('*')];
+    if (typeof getComputedStyle === 'function') {
+      sourceElements.forEach((element, index) => {
+        const style = getComputedStyle(element);
+        if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') {
+          const safeElement = safeElements[index];
+          if (index === 0) safeRoot.textContent = '';
+          else safeElement?.remove();
+        }
+      });
+    }
     safeRoot
       .querySelectorAll(
         'script, style, nav, form, input, textarea, select, option, button, [hidden], [aria-hidden="true"]',

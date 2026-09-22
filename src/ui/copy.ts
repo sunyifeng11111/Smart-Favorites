@@ -9,12 +9,12 @@ export const COPY = {
   consentItems: [
     '当前网页的标题、网址、域名、描述、H1 和最多 4,000 个可见字符',
     '可分类目录的完整路径',
-    '少量用于说明目录含义的收藏示例',
+    '若有目录示例，会发送少量示例的标题和域名，用于说明目录含义',
   ],
   consentAccept: '同意并继续',
   consentDecline: '不共享，手动选择',
   candidatesTitle: '选择一个候选目录',
-  allFoldersTitle: '完整目录',
+  allFoldersTitle: '全部可分类目录',
   chooseFolder: '选择目录',
   saveHere: '收藏到此处',
   savedTitle: '已收藏',
@@ -25,6 +25,12 @@ export const COPY = {
   noEligibleFolders: '没有可分类目录。请先在 Chrome 中创建收藏目录。',
   unsupportedPage: '此页面不会发送给 JEV，请手动选择目录。',
   genericError: '操作未完成，请重试。',
+  signalTitle: '查看本次使用的网页信号',
+  signalUrl: '网址',
+  signalDomain: '域名',
+  signalDescription: '页面描述',
+  signalHeading: '主标题',
+  signalText: '可见文本',
   settingsTitle: 'JEV 设置',
   keyLabel: 'JEV API 密钥',
   keyPlaceholder: '输入新密钥',
@@ -38,14 +44,12 @@ export const COPY = {
   keyCleared: '密钥已清除',
   keyValid: '连接成功',
   keyInvalid: '连接失败，请检查密钥',
+  consentRequiredForTest: '请先允许 JEV 数据共享，再测试连接',
   emptyKey: '请先输入密钥',
   consentSetting: 'JEV 数据共享',
   consentGranted: '已同意',
   consentDeclined: '已关闭',
+  consentUnknown: '尚未选择',
   allowConsent: '允许',
   declineConsent: '关闭',
 } as const;
-
-export type CopyMessageKey =
-  | 'classificationUnavailable'
-  | 'noEligibleFolders';

@@ -28,7 +28,7 @@ export class ChromePagePort implements PagePort {
     return {
       title,
       url,
-      domain: safeDomain(url),
+      domain: '',
       description: '',
       h1: '',
       visibleText: '',

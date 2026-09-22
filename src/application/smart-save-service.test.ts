@@ -37,6 +37,7 @@ class FakeBookmarks implements BookmarkPort {
 
 class FakeStorage implements SmartSaveStoragePort {
   private readonly operations = new Map<string, OperationState>();
+  private readonly operationQueues = new Map<string, Promise<void>>();
 
   constructor(private settings: Settings) {}
 
@@ -55,6 +56,13 @@ class FakeStorage implements SmartSaveStoragePort {
   async saveOperation(operation: OperationState): Promise<void> {
     this.operations.set(operation.id, structuredClone(operation));
   }
+
+  async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.operationQueues.get(id) ?? Promise.resolve();
+    const result = previous.then(task);
+    this.operationQueues.set(id, result.then(() => undefined, () => undefined));
+    return result;
+  }
 }
 
 const page: CapturedPage = {
@@ -68,7 +76,7 @@ const page: CapturedPage = {
 };
 
 describe('SmartSaveService', () => {
-  it('automatically saves exactly one bookmark when JEV confidently selects an Eligible Folder', async () => {
+  it('requires confirmation even when JEV confidently selects an Eligible Folder', async () => {
     const bookmarks = new FakeBookmarks([
       {
         id: '0',
@@ -124,6 +132,12 @@ describe('SmartSaveService', () => {
     });
     expect(result).toMatchObject({
       id: 'operation-1',
+      status: 'candidates',
+    });
+    expect(findNode(bookmarks.snapshot(), '10')?.children).toEqual([]);
+
+    const saved = await service.confirm({ operationId: result.id, folderId: '10' });
+    expect(saved).toMatchObject({
       status: 'saved',
       finalFolderId: '10',
       finalFolderPath: '书签栏 / 开发',
@@ -192,8 +206,10 @@ describe('SmartSaveService', () => {
     expect(candidates.folders.map(({ id }) => id)).toEqual(['1', '10', '11', '12', '13']);
     expect(findNode(bookmarks.snapshot(), '12')?.children).toEqual([]);
 
-    const saved = await service.confirm({ operationId: candidates.id, folderId: '11' });
-    const repeated = await service.confirm({ operationId: candidates.id, folderId: '11' });
+    const [saved, repeated] = await Promise.all([
+      service.confirm({ operationId: candidates.id, folderId: '11' }),
+      service.confirm({ operationId: candidates.id, folderId: '11' }),
+    ]);
 
     expect(saved).toMatchObject({
       status: 'saved',
@@ -288,6 +304,50 @@ describe('SmartSaveService', () => {
     expect(result.folders.map(({ id }) => id)).toEqual(['1']);
     expect(findNode(bookmarks.snapshot(), '1')?.children).toEqual([]);
     expect(JSON.stringify(result)).not.toContain('jev-secret');
+  });
+
+  it('never calls JEV for a non-web page and still exposes every Eligible Folder', async () => {
+    let jevCalls = 0;
+    const bookmarks = new FakeBookmarks([
+      {
+        id: '0',
+        title: '',
+        children: [{ id: '1', parentId: '0', title: '书签栏', children: [] }],
+      },
+    ]);
+    const service = new SmartSaveService({
+      pages: {
+        capture: async () => ({
+          ...page,
+          url: 'chrome://settings/',
+          domain: '',
+          visibleText: '',
+          classificationAllowed: false,
+          restrictionReason: 'unsupported-scheme',
+        }),
+      },
+      bookmarks,
+      jev: {
+        classify: async () => {
+          jevCalls += 1;
+          throw new Error('must not be called');
+        },
+        testKey: async () => undefined,
+      },
+      storage: new FakeStorage({
+        consent: 'granted',
+        apiKey: 'jev-secret',
+        excludedFolderIds: [],
+      }),
+      clock: { now: () => '2026-09-22T08:00:00.000Z' },
+      ids: { next: () => 'operation-5' },
+    });
+
+    const result = await service.start({ tabId: 42 });
+
+    expect(result.status).toBe('manual-selection');
+    expect(result.folders.map(({ id }) => id)).toEqual(['1']);
+    expect(jevCalls).toBe(0);
   });
 });
 

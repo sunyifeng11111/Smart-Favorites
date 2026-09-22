@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
 
 import type { OperationState } from '../../src/application/types';
-import { COPY, type CopyMessageKey } from '../../src/ui/copy';
+import { COPY } from '../../src/ui/copy';
 import { sendCommand } from '../../src/ui/send-command';
 
 export function PopupApp() {
@@ -35,7 +35,7 @@ export function PopupApp() {
   }
 
   const stateMessage = operation?.messageKey
-    ? COPY[operation.messageKey as CopyMessageKey]
+    ? COPY[operation.messageKey]
     : operation?.page.classificationAllowed === false
       ? COPY.unsupportedPage
       : '';
@@ -54,6 +54,19 @@ export function PopupApp() {
       {error && <p className="notice error">{error}</p>}
 
       {operation?.status === 'classifying' && <p className="status-card">{COPY.classifying}</p>}
+
+      {operation && (
+        <details className="panel signals">
+          <summary>{COPY.signalTitle}</summary>
+          <dl>
+            <dt>{COPY.signalUrl}</dt><dd>{operation.page.url}</dd>
+            <dt>{COPY.signalDomain}</dt><dd>{operation.page.domain || '—'}</dd>
+            <dt>{COPY.signalDescription}</dt><dd>{operation.page.description || '—'}</dd>
+            <dt>{COPY.signalHeading}</dt><dd>{operation.page.h1 || '—'}</dd>
+            <dt>{COPY.signalText}</dt><dd>{operation.page.visibleText || '—'}</dd>
+          </dl>
+        </details>
+      )}
 
       {operation?.status === 'consent-required' && (
         <section className="panel">

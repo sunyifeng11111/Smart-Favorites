@@ -53,7 +53,7 @@ export interface OperationState {
   folders: EligibleFolder[];
   candidates: FolderCandidate[];
   createdAt: string;
-  messageKey?: string;
+  messageKey?: 'classificationUnavailable' | 'noEligibleFolders';
   finalBookmarkId?: string;
   finalFolderId?: string;
   finalFolderPath?: string;
@@ -89,6 +89,7 @@ export interface SmartSaveStoragePort {
   saveSettings(settings: Settings): Promise<void>;
   getOperation(id: string): Promise<OperationState | undefined>;
   saveOperation(operation: OperationState): Promise<void>;
+  runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T>;
 }
 
 export interface ClockPort {

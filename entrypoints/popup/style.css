@@ -16,6 +16,11 @@ h2 { font-size: 16px; }
 .page-title { max-width: 295px; margin-bottom: 0; color: #667268; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .panel, .status-card { padding: 15px; border: 1px solid #dce4dc; border-radius: 14px; background: white; box-shadow: 0 8px 24px rgba(31, 53, 38, .06); }
 .panel + .panel { margin-top: 12px; }
+.signals { margin-bottom: 12px; }
+.signals summary { cursor: pointer; font-weight: 700; }
+.signals dl { margin-bottom: 0; }
+.signals dt { margin-top: 10px; color: #667268; font-size: 12px; }
+.signals dd { max-height: 120px; margin: 3px 0 0; overflow: auto; overflow-wrap: anywhere; line-height: 1.45; }
 ul { padding-left: 20px; color: #536058; line-height: 1.55; }
 .actions { display: grid; gap: 8px; }
 button { cursor: pointer; padding: 10px 12px; border: 1px solid #cbd6cd; border-radius: 10px; background: white; color: #243028; }

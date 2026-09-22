@@ -72,7 +72,7 @@ export function OptionsApp() {
         />
         <div className="button-row">
           <button className="primary" onClick={() => void saveKey()}>{COPY.saveKey}</button>
-          <button onClick={() => void testKey()}>{COPY.testKey}</button>
+          <button disabled={settings?.consent !== 'granted'} onClick={() => void testKey()}>{COPY.testKey}</button>
           <button className="danger" disabled={!settings?.hasApiKey} onClick={() => void clearKey()}>{COPY.clearKey}</button>
         </div>
         {feedback && <p className="feedback" role="status">{feedback}</p>}
@@ -80,7 +80,7 @@ export function OptionsApp() {
 
       <section className="card">
         <h2>{COPY.consentSetting}</h2>
-        <p>{settings?.consent === 'granted' ? COPY.consentGranted : COPY.consentDeclined}</p>
+        <p>{settings?.consent === 'granted' ? COPY.consentGranted : settings?.consent === 'declined' ? COPY.consentDeclined : COPY.consentUnknown}</p>
         <div className="button-row">
           <button className="primary" onClick={() => void setConsent(true)}>{COPY.allowConsent}</button>
           <button onClick={() => void setConsent(false)}>{COPY.declineConsent}</button>
@@ -94,5 +94,6 @@ function messageFor(error: unknown): string {
   if (!(error instanceof Error)) return COPY.genericError;
   if (error.message === 'emptyKey') return COPY.emptyKey;
   if (error.message === 'keyInvalid') return COPY.keyInvalid;
+  if (error.message === 'consentRequiredForTest') return COPY.consentRequiredForTest;
   return COPY.genericError;
 }

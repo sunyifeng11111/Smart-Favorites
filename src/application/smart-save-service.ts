@@ -9,9 +9,6 @@ import {
   type SmartSavePorts,
 } from './types';
 
-export const AUTO_SAVE_CONFIDENCE = 0.8;
-export const AUTO_SAVE_PROBABILITY = 0.7;
-
 export class SmartSaveService {
   constructor(private readonly ports: SmartSavePorts) {}
 
@@ -39,27 +36,29 @@ export class SmartSaveService {
   }
 
   async confirm(command: { operationId: string; folderId: string }): Promise<OperationState> {
-    const operation = await this.ports.storage.getOperation(command.operationId);
-    if (!operation) throw new Error('Smart Save operation not found');
-    if (operation.status === 'saved') return operation;
+    return this.ports.storage.runOperationExclusive(command.operationId, async () => {
+      const operation = await this.ports.storage.getOperation(command.operationId);
+      if (!operation) throw new Error('Smart Save operation not found');
+      if (operation.status === 'saved') return operation;
 
-    const folder = operation.folders.find(({ id }) => id === command.folderId);
-    if (!folder) throw new Error('Selected folder is not eligible');
+      const folder = operation.folders.find(({ id }) => id === command.folderId);
+      if (!folder) throw new Error('Selected folder is not eligible');
 
-    const bookmark = await this.ports.bookmarks.create({
-      parentId: folder.id,
-      title: operation.page.title,
-      url: operation.page.url,
+      const bookmark = await this.ports.bookmarks.create({
+        parentId: folder.id,
+        title: operation.page.title,
+        url: operation.page.url,
+      });
+      const savedState: OperationState = {
+        ...operation,
+        status: 'saved',
+        finalBookmarkId: bookmark.id,
+        finalFolderId: folder.id,
+        finalFolderPath: folder.path,
+      };
+      await this.ports.storage.saveOperation(savedState);
+      return savedState;
     });
-    const savedState: OperationState = {
-      ...operation,
-      status: 'saved',
-      finalBookmarkId: bookmark.id,
-      finalFolderId: folder.id,
-      finalFolderPath: folder.path,
-    };
-    await this.ports.storage.saveOperation(savedState);
-    return savedState;
   }
 
   async start(command: { tabId: number }): Promise<OperationState> {
@@ -120,30 +119,6 @@ export class SmartSaveService {
       await this.ports.storage.saveOperation(manualState);
       return manualState;
     }
-    const selected = operation.folders.find((folder) => folder.id === result.choice);
-    const selectedProbability = result.probabilities[result.choice] ?? 0;
-
-    if (
-      selected &&
-      result.confidence >= AUTO_SAVE_CONFIDENCE &&
-      selectedProbability >= AUTO_SAVE_PROBABILITY
-    ) {
-      const bookmark = await this.ports.bookmarks.create({
-        parentId: selected.id,
-        title: operation.page.title,
-        url: operation.page.url,
-      });
-      const savedState: OperationState = {
-        ...operation,
-        status: 'saved',
-        finalBookmarkId: bookmark.id,
-        finalFolderId: selected.id,
-        finalFolderPath: selected.path,
-      };
-      await this.ports.storage.saveOperation(savedState);
-      return savedState;
-    }
-
     const candidateState: OperationState = {
       ...operation,
       status: 'candidates',
