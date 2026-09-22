@@ -125,6 +125,7 @@ export interface OperationState {
   duplicateBookmarks: DuplicateBookmarkLocation[];
   createdAt: string;
   captureCompleted?: boolean;
+  retryingPending?: boolean;
   messageKey?:
     | 'classificationUnavailable'
     | 'invalidApiKey'

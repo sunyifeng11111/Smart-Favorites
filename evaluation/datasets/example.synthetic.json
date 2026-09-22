@@ -1,0 +1,84 @@
+[
+  {
+    "id": "synthetic-zh-product",
+    "language": "zh",
+    "labelSource": "manual",
+    "expectedFolderId": "chrome-folder-products",
+    "pendingFolderId": "chrome-folder-pending",
+    "page": {
+      "title": "示例产品设计文章",
+      "url": "https://example.test/zh-product",
+      "domain": "example.test",
+      "description": "用于展示评估格式的合成页面",
+      "h1": "产品设计",
+      "visibleText": "这不是实际浏览记录。"
+    },
+    "eligibleFolders": [
+      {
+        "id": "chrome-folder-products",
+        "path": "书签栏 / 产品",
+        "examples": [
+          {
+            "title": "外部合成示例",
+            "domain": "outside.test",
+            "sourcePageId": "not-in-this-evaluation-set"
+          }
+        ]
+      },
+      {
+        "id": "chrome-folder-reading",
+        "path": "书签栏 / 阅读",
+        "examples": []
+      }
+    ]
+  },
+  {
+    "id": "synthetic-en-engineering",
+    "language": "en",
+    "labelSource": "manual",
+    "expectedFolderId": "chrome-folder-engineering",
+    "pendingFolderId": "chrome-folder-pending",
+    "page": {
+      "title": "Synthetic engineering article",
+      "url": "https://example.test/en-engineering",
+      "domain": "example.test",
+      "description": "A synthetic page that documents the evaluation format",
+      "h1": "Engineering",
+      "visibleText": "This is not real browsing history."
+    },
+    "eligibleFolders": [
+      {
+        "id": "chrome-folder-engineering",
+        "path": "Bookmarks bar / Engineering",
+        "examples": []
+      },
+      {
+        "id": "chrome-folder-reading",
+        "path": "Bookmarks bar / Reading",
+        "examples": []
+      }
+    ]
+  },
+  {
+    "id": "synthetic-zh-pending",
+    "language": "zh",
+    "labelSource": "manual",
+    "expectedFolderId": "chrome-folder-pending",
+    "pendingFolderId": "chrome-folder-pending",
+    "page": {
+      "title": "没有合适目录的合成页面",
+      "url": "https://example.test/zh-pending",
+      "domain": "example.test",
+      "description": "正确答案是待分类目录",
+      "h1": "未匹配",
+      "visibleText": "这不是实际浏览记录。"
+    },
+    "eligibleFolders": [
+      {
+        "id": "chrome-folder-engineering",
+        "path": "书签栏 / 工程",
+        "examples": []
+      }
+    ]
+  }
+]

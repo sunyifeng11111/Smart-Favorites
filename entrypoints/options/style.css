@@ -28,3 +28,16 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .folder-tree input { width: auto; flex: 0 0 auto; }
 .folder-path { min-width: 0; overflow-wrap: anywhere; }
 .descendant-count { margin-left: auto; color: #68736b; font-size: .84rem; white-space: nowrap; }
+.section-heading, .record-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.section-heading p { margin-bottom: 0; }
+.record-list { display: grid; gap: 12px; padding: 0; list-style: none; }
+.record-card { padding: 16px; border: 1px solid #e1e8e1; border-radius: 12px; background: #f8faf8; }
+.record-heading > div { min-width: 0; display: grid; gap: 4px; }
+.record-heading a { color: #356347; overflow-wrap: anywhere; }
+.compact { padding: 6px 9px; white-space: nowrap; }
+.record-details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 12px; margin: 14px 0 0; }
+.record-details dt { color: #68736b; }
+.record-details dd { margin: 0; overflow-wrap: anywhere; }
+.export-box { display: grid; gap: 12px; margin-top: 18px; padding: 14px; border-radius: 10px; background: #fff7e6; }
+.export-box label { display: flex; gap: 10px; align-items: flex-start; color: #6f531c; }
+.export-box input { width: auto; margin-top: 3px; }

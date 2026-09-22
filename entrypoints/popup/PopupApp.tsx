@@ -51,6 +51,11 @@ export function PopupApp() {
     });
   }
 
+  function openRecentRecords() {
+    const url = browser.runtime.getURL('/options.html#recent-records');
+    void browser.tabs.create({ url });
+  }
+
   const stateMessage = operation?.messageKey
     ? COPY[operation.messageKey]
     : operation?.page.classificationAllowed === false
@@ -274,6 +279,7 @@ export function PopupApp() {
 
       <footer>
         <button className="link-button" onClick={() => void browser.runtime.openOptionsPage()}>{COPY.openSettings}</button>
+        <button className="link-button" onClick={openRecentRecords}>{COPY.openRecentRecords}</button>
       </footer>
     </main>
   );

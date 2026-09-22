@@ -86,6 +86,14 @@ async function handleCommand(command: ExtensionCommand): Promise<ExtensionRespon
         const folderTree = await service.setFolderExcluded(command);
         return success(await settingsView(await storage.getSettings(), service, folderTree));
       }
+      case 'DELETE_RECENT_RECORD': {
+        await storage.deleteRecentRecord(command.recordId);
+        return success(await settingsView(await storage.getSettings(), service));
+      }
+      case 'CLEAR_RECENT_RECORDS': {
+        await storage.clearRecentRecords();
+        return success(await settingsView(await storage.getSettings(), service));
+      }
     }
   } catch (error) {
     if (error instanceof JevClientError && error.code === 'invalid-key') {
@@ -101,11 +109,16 @@ async function settingsView(
   knownFolderTree?: SettingsView['folderTree'],
 ): Promise<SettingsView> {
   const apiKey = settings.apiKey ?? '';
+  const [folderTree, recentRecords] = await Promise.all([
+    knownFolderTree ?? service.getFolderExclusionTree(),
+    new ChromeStoragePort().getRecentRecords(),
+  ]);
   return {
     consent: settings.consent,
     hasApiKey: Boolean(apiKey),
     maskedApiKey: apiKey ? `••••${apiKey.slice(-4)}` : '',
-    folderTree: knownFolderTree ?? await service.getFolderExclusionTree(),
+    folderTree,
+    recentRecords,
   };
 }
 

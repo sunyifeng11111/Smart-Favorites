@@ -76,6 +76,61 @@ describe('Chrome durability adapters', () => {
     await expect(storage.getInFlightOperations()).resolves.toEqual([operation]);
   });
 
+  it('projects completed operation transitions into local Recent Records', async () => {
+    const storage = new ChromeStoragePort(() => '2026-09-22T08:00:00.000Z');
+    const saving = {
+      ...capturedOperation(),
+      status: 'creating-bookmark' as const,
+    };
+    const saved: OperationState = {
+      ...saving,
+      status: 'saved',
+      finalBookmarkId: 'bookmark-1',
+      finalFolderId: 'folder-1',
+      finalFolderPath: '书签栏 / 开发',
+      saveMethod: 'automatic',
+      mutation: {
+        kind: 'created',
+        bookmarkId: 'bookmark-1',
+        title: saving.page.title,
+        url: saving.page.url,
+        currentParentId: 'folder-1',
+      },
+    };
+
+    await storage.saveOperation(saving);
+    await storage.saveOperation(saved);
+
+    await expect(storage.getRecentRecords()).resolves.toEqual([
+      expect.objectContaining({
+        id: saved.id,
+        operationId: saved.id,
+        title: saved.page.title,
+        url: saved.page.url,
+        finalFolder: { id: 'folder-1', path: '书签栏 / 开发' },
+        undoState: 'available',
+        classificationPath: [expect.objectContaining({ kind: 'automatic-save' })],
+      }),
+    ]);
+    expect(JSON.stringify(chrome.local.smartSaveRecentRecords)).not.toContain('visibleText');
+  });
+
+  it('deletes one Recent Record and clears all records in local storage', async () => {
+    const storage = new ChromeStoragePort(() => '2026-09-22T08:00:00.000Z');
+    chrome.local.smartSaveRecentRecords = [
+      storedRecord('operation-1'),
+      storedRecord('operation-2'),
+    ];
+
+    await storage.deleteRecentRecord('operation-1');
+    await expect(storage.getRecentRecords()).resolves.toEqual([
+      expect.objectContaining({ id: 'operation-2' }),
+    ]);
+
+    await storage.clearRecentRecords();
+    await expect(storage.getRecentRecords()).resolves.toEqual([]);
+  });
+
   it('creates a folder node without a bookmark URL', async () => {
     const bookmarks = new ChromeBookmarkPort();
 
@@ -124,5 +179,21 @@ function capturedOperation(): OperationState {
     duplicateBookmarks: [],
     createdAt: '2026-09-22T08:00:00.000Z',
     captureCompleted: true,
+  };
+}
+
+function storedRecord(id: string) {
+  return {
+    id,
+    operationId: id,
+    title: id,
+    url: `https://example.com/${id}`,
+    timestamp: '2026-09-22T07:00:00.000Z',
+    updatedAt: '2026-09-22T07:00:00.000Z',
+    classificationPath: [
+      { kind: 'confirmed-save', timestamp: '2026-09-22T07:00:00.000Z' },
+    ],
+    finalFolder: { id: 'folder-1', path: '书签栏 / 开发' },
+    undoState: 'available',
   };
 }

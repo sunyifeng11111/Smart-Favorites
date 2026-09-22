@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://smart-favorites.local/evaluation-set.schema.json",
+  "title": "Smart Favorites Evaluation Set",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "id",
+      "language",
+      "labelSource",
+      "expectedFolderId",
+      "pendingFolderId",
+      "page",
+      "eligibleFolders"
+    ],
+    "properties": {
+      "id": { "type": "string", "minLength": 1 },
+      "language": { "enum": ["zh", "en"] },
+      "labelSource": { "const": "manual" },
+      "expectedFolderId": { "type": "string", "minLength": 1 },
+      "pendingFolderId": { "type": "string", "minLength": 1 },
+      "page": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "url", "domain", "description", "h1", "visibleText"],
+        "properties": {
+          "title": { "type": "string" },
+          "url": { "type": "string", "format": "uri" },
+          "domain": { "type": "string" },
+          "description": { "type": "string" },
+          "h1": { "type": "string" },
+          "visibleText": { "type": "string" }
+        }
+      },
+      "eligibleFolders": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "path", "examples"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "examples": {
+              "type": "array",
+              "maxItems": 3,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["title", "domain", "sourcePageId"],
+                "properties": {
+                  "title": { "type": "string" },
+                  "domain": { "type": "string" },
+                  "sourcePageId": { "type": "string", "minLength": 1 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

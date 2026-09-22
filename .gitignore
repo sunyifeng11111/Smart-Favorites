@@ -4,4 +4,7 @@ node_modules/
 coverage/
 *.log
 .DS_Store
-
+evaluation/datasets/*
+!evaluation/datasets/example.synthetic.json
+evaluation/results/
+*.evaluation-results.json

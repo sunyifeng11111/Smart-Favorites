@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
 
+import {
+  buildRecentRecordsExport,
+  type RecentRecordEventKind,
+} from '../../src/application/recent-records';
 import type { FolderExclusionNode } from '../../src/application/types';
 import type { SettingsView } from '../../src/runtime/messages';
 import { COPY } from '../../src/ui/copy';
@@ -9,6 +13,7 @@ export function OptionsApp() {
   const [settings, setSettings] = useState<SettingsView>();
   const [apiKey, setApiKey] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [exportAcknowledged, setExportAcknowledged] = useState(false);
 
   useEffect(() => {
     document.title = `${COPY.productName} · ${COPY.settings}`;
@@ -65,6 +70,36 @@ export function OptionsApp() {
     }
   }
 
+  async function deleteRecentRecord(recordId: string) {
+    const data = await sendCommand({ type: 'DELETE_RECENT_RECORD', recordId });
+    if ('hasApiKey' in data) setSettings(data);
+  }
+
+  async function clearRecentRecords() {
+    const data = await sendCommand({ type: 'CLEAR_RECENT_RECORDS' });
+    if ('hasApiKey' in data) setSettings(data);
+  }
+
+  function exportRecentRecords() {
+    if (!settings) return;
+    try {
+      const json = buildRecentRecordsExport(
+        settings.recentRecords,
+        exportAcknowledged,
+        new Date().toISOString(),
+      );
+      const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `smart-favorites-recent-records-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setFeedback(COPY.recordsExported);
+    } catch {
+      setFeedback(COPY.exportAcknowledgementRequired);
+    }
+  }
+
   return (
     <main className="settings-shell">
       <header>
@@ -115,8 +150,82 @@ export function OptionsApp() {
           <p>{COPY.folderTreeEmpty}</p>
         )}
       </section>
+
+      <section className="card" id="recent-records">
+        <div className="section-heading">
+          <div>
+            <h2>{COPY.recentRecordsTitle}</h2>
+            <p>{COPY.recentRecordsIntro}</p>
+          </div>
+          <button
+            className="danger"
+            disabled={!settings?.recentRecords.length}
+            onClick={() => void clearRecentRecords()}
+          >
+            {COPY.clearAllRecords}
+          </button>
+        </div>
+
+        {settings && settings.recentRecords.length > 0 ? (
+          <ol className="record-list">
+            {settings.recentRecords.map((record) => (
+              <li key={record.id} className="record-card">
+                <div className="record-heading">
+                  <div>
+                    <strong>{record.title}</strong>
+                    <a href={record.url} target="_blank" rel="noreferrer">{record.url}</a>
+                  </div>
+                  <button
+                    className="danger compact"
+                    aria-label={`${COPY.deleteRecord}：${record.title}`}
+                    onClick={() => void deleteRecentRecord(record.id)}
+                  >
+                    {COPY.deleteRecord}
+                  </button>
+                </div>
+                <dl className="record-details">
+                  <dt>{COPY.recordTimestamp}</dt>
+                  <dd>{new Date(record.timestamp).toLocaleString()}</dd>
+                  {record.originalFolder && (
+                    <><dt>{COPY.recordOriginalFolder}</dt><dd>{record.originalFolder.path}</dd></>
+                  )}
+                  <dt>{COPY.recordFinalFolder}</dt>
+                  <dd>{record.finalFolder?.path ?? COPY.recordNoFinalFolder}</dd>
+                  <dt>{COPY.recordUndoState}</dt>
+                  <dd>{COPY.recordUndoStates[record.undoState]}</dd>
+                  <dt>{COPY.recordClassificationPath}</dt>
+                  <dd>{record.classificationPath.map(({ kind }) => eventLabel(kind)).join(' → ')}</dd>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p>{COPY.recentRecordsEmpty}</p>
+        )}
+
+        <div className="export-box">
+          <label>
+            <input
+              type="checkbox"
+              checked={exportAcknowledged}
+              onChange={(event) => setExportAcknowledged(event.target.checked)}
+            />
+            <span>{COPY.exportWarning}</span>
+          </label>
+          <button
+            disabled={!settings?.recentRecords.length || !exportAcknowledged}
+            onClick={exportRecentRecords}
+          >
+            {COPY.exportRecords}
+          </button>
+        </div>
+      </section>
     </main>
   );
+}
+
+function eventLabel(kind: RecentRecordEventKind): string {
+  return COPY.recordEventLabels[kind];
 }
 
 function FolderTree({

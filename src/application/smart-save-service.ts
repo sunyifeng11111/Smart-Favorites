@@ -39,6 +39,7 @@ export class SmartSaveService {
       const retrying: OperationState = {
         ...refreshed,
         status: 'classifying',
+        retryingPending: true,
       };
       delete retrying.messageKey;
       delete retrying.recoveryAction;

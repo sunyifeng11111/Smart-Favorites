@@ -41,5 +41,5 @@ select { width: 100%; padding: 10px; border: 1px solid #cbd6cd; border-radius: 1
 .saved-actions { display: grid; gap: 8px; margin-top: 12px; }
 .danger { color: #a33c30; }
 .success-mark { margin: 0 auto 10px; border-radius: 50%; }
-footer { padding-top: 12px; text-align: center; }
+footer { display: flex; justify-content: center; gap: 14px; padding-top: 12px; text-align: center; }
 .link-button { padding: 5px; border: 0; background: transparent; color: #2b6e49; text-decoration: underline; }

@@ -1,5 +1,10 @@
 import { browser } from 'wxt/browser';
 
+import {
+  normalizeRecentRecords,
+  updateRecentRecords,
+  type RecentRecord,
+} from '../application/recent-records';
 import type {
   OperationState,
   Settings,
@@ -11,6 +16,7 @@ const SETTINGS_KEY = 'smartSaveSettings';
 const OPERATIONS_KEY = 'smartSaveOperations';
 const CORRECTIONS_KEY = 'classificationCorrections';
 const FOLDER_EXAMPLES_KEY = 'folderExamples';
+const RECENT_RECORDS_KEY = 'smartSaveRecentRecords';
 
 const DEFAULT_SETTINGS: Settings = {
   consent: 'unknown',
@@ -18,6 +24,8 @@ const DEFAULT_SETTINGS: Settings = {
 };
 
 export class ChromeStoragePort implements SmartSaveStoragePort {
+  constructor(private readonly now: () => string = () => new Date().toISOString()) {}
+
   async getSettings(): Promise<Settings> {
     const stored = (await browser.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY];
     if (!isRecord(stored)) return { ...DEFAULT_SETTINGS };
@@ -71,10 +79,46 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
   }
 
   async saveOperation(operation: OperationState): Promise<void> {
+    let previous: OperationState | undefined;
     await navigator.locks.request('smart-favorites-operations', async () => {
       const operations = await this.getOperations();
+      previous = operations[operation.id];
       operations[operation.id] = operation;
       await browser.storage.session.set({ [OPERATIONS_KEY]: operations });
+    });
+    await navigator.locks.request('smart-favorites-recent-records', async () => {
+      const recordedAt = this.now();
+      const records = await this.readRecentRecords(recordedAt);
+      await browser.storage.local.set({
+        [RECENT_RECORDS_KEY]: updateRecentRecords(
+          records,
+          previous,
+          operation,
+          recordedAt,
+        ),
+      });
+    });
+  }
+
+  async getRecentRecords(): Promise<RecentRecord[]> {
+    const now = this.now();
+    const records = await this.readRecentRecords(now);
+    await browser.storage.local.set({ [RECENT_RECORDS_KEY]: records });
+    return records;
+  }
+
+  async deleteRecentRecord(id: string): Promise<void> {
+    await navigator.locks.request('smart-favorites-recent-records', async () => {
+      const records = await this.readRecentRecords(this.now());
+      await browser.storage.local.set({
+        [RECENT_RECORDS_KEY]: records.filter((record) => record.id !== id),
+      });
+    });
+  }
+
+  async clearRecentRecords(): Promise<void> {
+    await navigator.locks.request('smart-favorites-recent-records', async () => {
+      await browser.storage.local.set({ [RECENT_RECORDS_KEY]: [] });
     });
   }
 
@@ -116,6 +160,11 @@ export class ChromeStoragePort implements SmartSaveStoragePort {
   private async getOperations(): Promise<Record<string, OperationState>> {
     const stored = (await browser.storage.session.get(OPERATIONS_KEY))[OPERATIONS_KEY];
     return isRecord(stored) ? (stored as Record<string, OperationState>) : {};
+  }
+
+  private async readRecentRecords(now: string): Promise<RecentRecord[]> {
+    const stored = (await browser.storage.local.get(RECENT_RECORDS_KEY))[RECENT_RECORDS_KEY];
+    return normalizeRecentRecords(stored, now);
   }
 }
 
