@@ -70,6 +70,7 @@ class SafetyBookmarks implements BookmarkPort {
 
 class SafetyStorage implements SmartSaveStoragePort {
   private readonly operations = new Map<string, OperationState>();
+  private readonly operationQueues = new Map<string, Promise<void>>();
   readonly corrections: ClassificationCorrection[] = [];
   private correctionFailuresRemaining = 0;
 
@@ -91,8 +92,11 @@ class SafetyStorage implements SmartSaveStoragePort {
     this.operations.set(operation.id, structuredClone(operation));
   }
 
-  async runOperationExclusive<T>(_id: string, task: () => Promise<T>): Promise<T> {
-    return task();
+  async runOperationExclusive<T>(id: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.operationQueues.get(id) ?? Promise.resolve();
+    const result = previous.then(task);
+    this.operationQueues.set(id, result.then(() => undefined, () => undefined));
+    return result;
   }
 
   async saveClassificationCorrection(correction: ClassificationCorrection): Promise<void> {
@@ -346,6 +350,43 @@ describe('SmartSaveService mutation safety', () => {
       'Page changed before capture completed',
     );
     expect(events).toEqual(['tree']);
+  });
+
+  it('serializes repeated consent decisions so Automatic Save creates one bookmark', async () => {
+    let jevCalls = 0;
+    const bookmarks = new SafetyBookmarks(emptyFolderTree());
+    const service = new SmartSaveService({
+      pages: { inspect: async () => page, capture: async () => page },
+      bookmarks,
+      jev: {
+        classify: async () => {
+          jevCalls += 1;
+          return {
+            choice: '10',
+            confidence: 0.9,
+            probabilities: { '10': 0.9, '11': 0.05, __no_match__: 0.05 },
+          };
+        },
+        testKey: async () => undefined,
+      },
+      storage: new SafetyStorage({
+        consent: 'unknown',
+        apiKey: 'jev-secret',
+        excludedFolderIds: [],
+      }),
+      clock: { now: () => '2026-09-22T08:00:00.000Z' },
+      ids: { next: () => 'operation-consent-race' },
+    });
+
+    const disclosure = await service.start({ tabId: 42 });
+    const [first, repeated] = await Promise.all([
+      service.decideConsent({ operationId: disclosure.id, granted: true }),
+      service.decideConsent({ operationId: disclosure.id, granted: true }),
+    ]);
+
+    expect(first).toEqual(repeated);
+    expect(jevCalls).toBe(1);
+    expect(findNode(bookmarks.snapshot(), '10')?.children).toHaveLength(1);
   });
 
   it('creates an intentional duplicate only after the user explicitly allows a copy', async () => {

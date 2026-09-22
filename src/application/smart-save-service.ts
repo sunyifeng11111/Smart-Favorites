@@ -99,12 +99,7 @@ export class SmartSaveService {
         finalFolderPath: folder.path,
         mutation,
       };
-      const changed: OperationState = {
-        ...changedWithoutCorrection,
-        pendingCorrection: this.buildCorrection(changedWithoutCorrection, folder.id),
-      };
-      await this.ports.storage.saveOperation(changed);
-      return this.completePendingCorrection(changed);
+      return this.persistWithCorrection(changedWithoutCorrection, folder.id);
     });
   }
 
@@ -152,24 +147,33 @@ export class SmartSaveService {
     operationId: string;
     granted: boolean;
   }): Promise<OperationState> {
-    const operation = await this.ports.storage.getOperation(command.operationId);
-    if (!operation) throw new Error('Smart Save operation not found');
-    if (operation.status !== 'consent-required') {
-      throw new Error('Consent decision is not available');
-    }
+    return this.ports.storage.runOperationExclusive(command.operationId, async () => {
+      const operation = await this.ports.storage.getOperation(command.operationId);
+      if (!operation) throw new Error('Smart Save operation not found');
+      if (
+        operation.status === 'manual-selection' ||
+        operation.status === 'candidates' ||
+        operation.status === 'saved'
+      ) {
+        return operation;
+      }
+      if (operation.status !== 'consent-required') {
+        throw new Error('Consent decision is not available');
+      }
 
-    const settings = await this.ports.storage.getSettings();
-    const updatedSettings = {
-      ...settings,
-      consent: command.granted ? ('granted' as const) : ('declined' as const),
-    };
-    await this.ports.storage.saveSettings(updatedSettings);
+      const settings = await this.ports.storage.getSettings();
+      const updatedSettings = {
+        ...settings,
+        consent: command.granted ? ('granted' as const) : ('declined' as const),
+      };
+      await this.ports.storage.saveSettings(updatedSettings);
 
-    if (!command.granted || !updatedSettings.apiKey || !operation.page.classificationAllowed) {
-      return this.showManualSelection(operation);
-    }
+      if (!command.granted || !updatedSettings.apiKey || !operation.page.classificationAllowed) {
+        return this.showManualSelection(operation);
+      }
 
-    return this.classify(operation, updatedSettings.apiKey);
+      return this.classify(operation, updatedSettings.apiKey);
+    });
   }
 
   async confirm(command: { operationId: string; folderId: string }): Promise<OperationState> {
@@ -362,12 +366,7 @@ export class SmartSaveService {
         currentParentId: folder.id,
       },
     };
-    const savedState: OperationState = {
-      ...savedWithoutCorrection,
-      pendingCorrection: this.buildCorrection(savedWithoutCorrection, folder.id),
-    };
-    await this.ports.storage.saveOperation(savedState);
-    return this.completePendingCorrection(savedState);
+    return this.persistWithCorrection(savedWithoutCorrection, folder.id);
   }
 
   private async stopForExternalChange(operation: OperationState): Promise<OperationState> {
@@ -392,6 +391,18 @@ export class SmartSaveService {
       folderId,
       createdAt: this.ports.clock.now(),
     };
+  }
+
+  private async persistWithCorrection(
+    operation: OperationState,
+    folderId: string,
+  ): Promise<OperationState> {
+    const pending: OperationState = {
+      ...operation,
+      pendingCorrection: this.buildCorrection(operation, folderId),
+    };
+    await this.ports.storage.saveOperation(pending);
+    return this.completePendingCorrection(pending);
   }
 
   private async completePendingCorrection(operation: OperationState): Promise<OperationState> {
