@@ -47,12 +47,36 @@ test('production manifest and settings wiring are verifiable in Chromium', async
 }) => {
   const manifest: unknown = await serviceWorker.evaluate(() => chrome.runtime.getManifest());
   verifyProductionManifest(manifest);
+  expect(manifest).toMatchObject({
+    icons: {
+      16: 'icon/16.png',
+      32: 'icon/32.png',
+      48: 'icon/48.png',
+      128: 'icon/128.png',
+    },
+    options_ui: {
+      open_in_tab: true,
+      page: 'options.html',
+    },
+  });
 
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/options.html`);
-  await page.getByLabel('JEV API 密钥').fill('browser-smoke-secret');
-  await page.getByRole('button', { name: '保存 / 替换' }).click();
+  const keyInput = page.getByLabel('JEV API 密钥');
+  const editableKeyBox = await keyInput.boundingBox();
+  await keyInput.fill('browser-smoke-secret');
+  await page.getByRole('button', { name: '保存密钥' }).click();
   await expect(page.getByText('密钥已保存')).toBeVisible();
+  await expect(keyInput).toHaveValue('••••cret');
+  await expect(keyInput).toHaveAttribute('readonly');
+  const lockedKeyBox = await keyInput.boundingBox();
+  expect(lockedKeyBox?.width).toBe(editableKeyBox?.width);
+  expect(lockedKeyBox?.height).toBe(editableKeyBox?.height);
+
+  await page.getByRole('button', { name: '修改密钥' }).click();
+  await expect(page.getByLabel('JEV API 密钥')).toBeEditable();
+  await expect(page.getByLabel('JEV API 密钥')).toHaveValue('');
+  await page.getByRole('button', { name: '取消修改' }).click();
 
   await page.reload();
   await expect(page.getByText('已保存：••••cret')).toBeVisible();
@@ -90,6 +114,16 @@ test('settings verifies a saved JEV key in Chromium', async ({
   await page.getByRole('button', { name: '测试连接' }).click();
 
   await expect(page.getByRole('status')).toHaveText('连接成功');
+  await expect(page.getByLabel('JEV API 密钥')).toHaveAttribute('readonly');
+
+  await serviceWorker.evaluate(() => {
+    globalThis.fetch = async () => new Response('', { status: 401 });
+  });
+  await page.getByRole('button', { name: '测试连接' }).click();
+
+  await expect(page.getByRole('status')).toHaveText('连接失败，请检查密钥');
+  await expect(page.getByLabel('JEV API 密钥')).toBeEditable();
+  await expect(page.getByLabel('JEV API 密钥')).toHaveValue('');
 });
 
 test('popup completes classification, bookmark move, content capture, and Undo', async ({
@@ -104,6 +138,8 @@ test('popup completes classification, bookmark move, content capture, and Undo',
 
   const popup = await openPopupPage(context, fixture, extensionId);
   await expect(popup.getByRole('heading', { name: '已自动收藏' })).toBeVisible();
+  const savedFolderSelect = await popup.getByLabel('选择目录').boundingBox();
+  expect(savedFolderSelect?.width).toBeGreaterThan(300);
   await popup.getByText('查看本次使用的网页信号').click();
   await expect(popup.getByText('Fixture description')).toBeVisible();
   await expect(popup.getByText('Capture heading', { exact: true })).toBeVisible();

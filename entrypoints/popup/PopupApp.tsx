@@ -1,7 +1,22 @@
 import { useEffect, useState } from 'react';
 import { browser } from 'wxt/browser';
+import {
+  ArrowCounterClockwise,
+  ArrowRight,
+  ArrowsClockwise,
+  Check,
+  CheckCircle,
+  CaretDown,
+  ClockCounterClockwise,
+  FolderSimple,
+  GearSix,
+  Info,
+  ShieldCheck,
+  WarningCircle,
+} from '@phosphor-icons/react';
 
 import type { OperationState } from '../../src/application/types';
+import { BrandMark } from '../../src/ui/BrandMark';
 import { COPY } from '../../src/ui/copy';
 import { sendCommand } from '../../src/ui/send-command';
 
@@ -9,6 +24,7 @@ export function PopupApp() {
   const [operation, setOperation] = useState<OperationState>();
   const [selectedFolderId, setSelectedFolderId] = useState('');
   const [error, setError] = useState('');
+  const [isWorking, setIsWorking] = useState(false);
 
   useEffect(() => {
     document.title = COPY.productName;
@@ -17,6 +33,7 @@ export function PopupApp() {
 
   async function runCommand(command: Parameters<typeof sendCommand>[0]) {
     setError('');
+    setIsWorking(true);
     try {
       const data = await sendCommand(command);
       if ('status' in data) {
@@ -34,6 +51,8 @@ export function PopupApp() {
     } catch (caught) {
       const key = caught instanceof Error ? caught.message : 'genericError';
       setError(key in COPY ? String(COPY[key as keyof typeof COPY]) : COPY.genericError);
+    } finally {
+      setIsWorking(false);
     }
   }
 
@@ -68,9 +87,9 @@ export function PopupApp() {
       : '';
 
   return (
-    <main className="popup-shell">
-      <header>
-        <div className="brand-mark">S</div>
+    <main className="popup-shell" aria-busy={isWorking}>
+      <header className="app-header">
+        <BrandMark size="small" />
         <div>
           <h1>{COPY.productName}</h1>
           {operation?.page.title && <p className="page-title">{operation.page.title}</p>}
@@ -78,7 +97,7 @@ export function PopupApp() {
       </header>
 
       {!operation && !error && <p className="status-card">{COPY.loading}</p>}
-      {error && <p className="notice error">{error}</p>}
+      {error && <p className="notice error"><WarningCircle weight="fill" />{error}</p>}
 
       {operation?.status === 'classifying' && <p className="status-card">{COPY.classifying}</p>}
 
@@ -90,22 +109,9 @@ export function PopupApp() {
         <section className="panel">
           <p className="notice">{COPY.pageChangedBeforeCapture}</p>
           <button className="primary" onClick={() => void runCommand({ type: 'START_SMART_SAVE' })}>
-            {COPY.retryClassification}
+            <ArrowsClockwise weight="bold" />{COPY.retryClassification}
           </button>
         </section>
-      )}
-
-      {operation && (
-        <details className="panel signals">
-          <summary>{COPY.signalTitle}</summary>
-          <dl>
-            <dt>{COPY.signalUrl}</dt><dd>{operation.page.url}</dd>
-            <dt>{COPY.signalDomain}</dt><dd>{operation.page.domain || '—'}</dd>
-            <dt>{COPY.signalDescription}</dt><dd>{operation.page.description || '—'}</dd>
-            <dt>{COPY.signalHeading}</dt><dd>{operation.page.h1 || '—'}</dd>
-            <dt>{COPY.signalText}</dt><dd>{operation.page.visibleText || '—'}</dd>
-          </dl>
-        </details>
       )}
 
       {operation?.status === 'consent-required' && (
@@ -118,7 +124,7 @@ export function PopupApp() {
               className="primary"
               onClick={() => void runCommand({ type: 'DECIDE_CONSENT', operationId: operation.id, granted: true })}
             >
-              {COPY.consentAccept}
+              <ShieldCheck weight="bold" />{COPY.consentAccept}
             </button>
             <button
               onClick={() => void runCommand({ type: 'DECIDE_CONSENT', operationId: operation.id, granted: false })}
@@ -146,7 +152,7 @@ export function PopupApp() {
                     bookmarkId: duplicate.bookmarkId,
                   })}
                 >
-                  {COPY.reclassifyExisting}
+                  <ArrowRight />{COPY.reclassifyExisting}
                 </button>
               </li>
             ))}
@@ -160,7 +166,7 @@ export function PopupApp() {
                 action: 'preserve',
               })}
             >
-              {COPY.preserveExisting}
+              <Check weight="bold" />{COPY.preserveExisting}
             </button>
             <button
               onClick={() => void runCommand({
@@ -177,7 +183,7 @@ export function PopupApp() {
 
       {operation?.status === 'duplicate-preserved' && (
         <section className="panel saved">
-          <div className="success-mark">✓</div>
+          <div className="success-mark"><CheckCircle weight="fill" /></div>
           <h2>{COPY.duplicatePreservedTitle}</h2>
           <p>{COPY.duplicatePreservedBody}</p>
         </section>
@@ -189,7 +195,7 @@ export function PopupApp() {
           <div className="candidate-list">
             {operation.candidates.map((candidate) => (
               <button className="candidate" key={candidate.id} onClick={() => confirm(candidate.id)}>
-                <span>{candidate.path}</span>
+                <span><FolderSimple />{candidate.path}</span>
                 <strong>{Math.round(candidate.probability * 100)}%</strong>
               </button>
             ))}
@@ -204,11 +210,14 @@ export function PopupApp() {
           {operation.folders.length > 0 && (
             <>
               <label htmlFor="folder">{COPY.chooseFolder}</label>
-              <select id="folder" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}>
-                {operation.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
-              </select>
+              <div className="select-field">
+                <select id="folder" value={selectedFolderId} onChange={(event) => setSelectedFolderId(event.target.value)}>
+                  {operation.folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.path}</option>)}
+                </select>
+                <CaretDown weight="bold" aria-hidden="true" />
+              </div>
               <button className="primary" disabled={!selectedFolderId} onClick={() => confirm(selectedFolderId)}>
-                {operation.selectedExistingBookmarkId ? COPY.moveExistingHere : COPY.saveHere}
+                <FolderSimple weight="fill" />{operation.selectedExistingBookmarkId ? COPY.moveExistingHere : COPY.saveHere}
               </button>
             </>
           )}
@@ -222,17 +231,20 @@ export function PopupApp() {
           {operation.recoveryAction === 'choose-folder-manually' && operation.folders.length > 0 && (
             <>
               <label htmlFor="pending-folder">{COPY.chooseFolder}</label>
-              <select
-                id="pending-folder"
-                value={selectedFolderId}
-                onChange={(event) => setSelectedFolderId(event.target.value)}
-              >
-                {operation.folders.map((folder) => (
-                  <option key={folder.id} value={folder.id}>{folder.path}</option>
-                ))}
-              </select>
+              <div className="select-field">
+                <select
+                  id="pending-folder"
+                  value={selectedFolderId}
+                  onChange={(event) => setSelectedFolderId(event.target.value)}
+                >
+                  {operation.folders.map((folder) => (
+                    <option key={folder.id} value={folder.id}>{folder.path}</option>
+                  ))}
+                </select>
+                <CaretDown weight="bold" aria-hidden="true" />
+              </div>
               <button className="primary" disabled={!selectedFolderId} onClick={() => confirm(selectedFolderId)}>
-                {COPY.saveHere}
+                <FolderSimple weight="fill" />{COPY.saveHere}
               </button>
             </>
           )}
@@ -242,36 +254,39 @@ export function PopupApp() {
           <button
             onClick={() => void runCommand({ type: 'RETRY_PENDING', operationId: operation.id })}
           >
-            {COPY.retryClassification}
+            <ArrowsClockwise />{COPY.retryClassification}
           </button>
           <button
             className="danger"
             onClick={undo}
           >
-            {COPY.undo}
+            <ArrowCounterClockwise />{COPY.undo}
           </button>
         </section>
       )}
 
       {operation?.status === 'saved' && (
         <section className="panel saved">
-          <div className="success-mark">✓</div>
+          <div className="success-mark"><CheckCircle weight="fill" /></div>
           <h2>{operation.saveMethod === 'automatic' ? COPY.automaticSavedTitle : COPY.savedTitle}</h2>
           <p>{COPY.savedPathPrefix}{operation.finalFolderPath}</p>
           {stateMessage && <p className="notice">{stateMessage}</p>}
           <div className="saved-actions">
-            <select
-              aria-label={COPY.chooseFolder}
-              value={selectedFolderId}
-              onChange={(event) => setSelectedFolderId(event.target.value)}
-            >
-              {operation.folders.map((folder) => (
-                <option key={folder.id} value={folder.id}>{folder.path}</option>
-              ))}
-            </select>
-            <button onClick={changeDestination}>{COPY.changeDestination}</button>
+            <div className="select-field">
+              <select
+                aria-label={COPY.chooseFolder}
+                value={selectedFolderId}
+                onChange={(event) => setSelectedFolderId(event.target.value)}
+              >
+                {operation.folders.map((folder) => (
+                  <option key={folder.id} value={folder.id}>{folder.path}</option>
+                ))}
+              </select>
+              <CaretDown weight="bold" aria-hidden="true" />
+            </div>
+            <button onClick={changeDestination}><FolderSimple />{COPY.changeDestination}</button>
             <button className="danger" onClick={undo}>
-              {COPY.undo}
+              <ArrowCounterClockwise />{COPY.undo}
             </button>
           </div>
         </section>
@@ -279,15 +294,28 @@ export function PopupApp() {
 
       {operation?.status === 'undone' && (
         <section className="panel saved">
-          <div className="success-mark">↶</div>
+          <div className="success-mark"><ArrowCounterClockwise weight="bold" /></div>
           <h2>{COPY.undoneTitle}</h2>
           <p>{COPY.undoneBody}</p>
         </section>
       )}
 
+      {operation && (
+        <details className="signals">
+          <summary><Info />{COPY.signalTitle}</summary>
+          <dl>
+            <dt>{COPY.signalUrl}</dt><dd>{operation.page.url}</dd>
+            <dt>{COPY.signalDomain}</dt><dd>{operation.page.domain || '未提供'}</dd>
+            <dt>{COPY.signalDescription}</dt><dd>{operation.page.description || '未提供'}</dd>
+            <dt>{COPY.signalHeading}</dt><dd>{operation.page.h1 || '未提供'}</dd>
+            <dt>{COPY.signalText}</dt><dd>{operation.page.visibleText || '未提供'}</dd>
+          </dl>
+        </details>
+      )}
+
       <footer>
-        <button className="link-button" onClick={() => void browser.runtime.openOptionsPage()}>{COPY.openSettings}</button>
-        <button className="link-button" onClick={openRecentRecords}>{COPY.openRecentRecords}</button>
+        <button className="link-button" onClick={() => void browser.runtime.openOptionsPage()}><GearSix />{COPY.openSettings}</button>
+        <button className="link-button" onClick={openRecentRecords}><ClockCounterClockwise />{COPY.openRecentRecords}</button>
       </footer>
     </main>
   );
