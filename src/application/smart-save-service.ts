@@ -13,9 +13,8 @@ import {
   type StoredFolderExample,
 } from './types';
 import { httpDomain } from '../shared/url';
+import { qualifiesForAutomaticSave } from './classification-policy';
 
-const AUTOMATIC_CONFIDENCE_THRESHOLD = 0.8;
-const AUTOMATIC_OPTION_PROBABILITY_THRESHOLD = 0.7;
 const PENDING_FOLDER_TITLE = '待分类';
 
 export class SmartSaveService {
@@ -475,12 +474,10 @@ export class SmartSaveService {
       );
     }
     const winningFolder = currentOperation.folders.find(({ id }) => id === result.choice);
-    const winningProbability = result.probabilities[result.choice] ?? 0;
     if (
       winningFolder &&
       !currentOperation.selectedExistingBookmarkId &&
-      result.confidence >= AUTOMATIC_CONFIDENCE_THRESHOLD &&
-      winningProbability >= AUTOMATIC_OPTION_PROBABILITY_THRESHOLD
+      qualifiesForAutomaticSave(result)
     ) {
       if (isPendingOperation(currentOperation)) {
         return this.movePendingBookmark(currentOperation, winningFolder, 'automatic');

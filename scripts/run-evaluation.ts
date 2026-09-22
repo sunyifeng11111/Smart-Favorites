@@ -4,6 +4,7 @@ import process from 'node:process';
 import { HttpJevClient } from '../src/adapters/jev-client';
 import {
   runEvaluationSet,
+  validateEvaluationSet,
   type EvaluationCase,
 } from '../src/evaluation/evaluation';
 
@@ -14,7 +15,9 @@ if (!datasetPath) {
 const apiKey = process.env.JEV_API_KEY?.trim();
 if (!apiKey) throw new Error('Set JEV_API_KEY before running an evaluation');
 
-const cases = JSON.parse(await readFile(datasetPath, 'utf8')) as EvaluationCase[];
+const parsed: unknown = JSON.parse(await readFile(datasetPath, 'utf8'));
+validateEvaluationSet(parsed);
+const cases: EvaluationCase[] = parsed;
 const client = new HttpJevClient();
 const { report } = await runEvaluationSet(cases, async (request) => {
   const result = await client.classify(request, apiKey);

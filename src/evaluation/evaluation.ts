@@ -1,7 +1,5 @@
 import { NO_MATCH_OPTION, type JevClassificationRequest } from '../application/types';
-
-const AUTOMATIC_CONFIDENCE_THRESHOLD = 0.8;
-const AUTOMATIC_OPTION_PROBABILITY_THRESHOLD = 0.7;
+import { qualifiesForAutomaticSave } from '../application/classification-policy';
 
 export interface EvaluationFolderExample {
   title: string;
@@ -64,9 +62,15 @@ export async function runEvaluationSet(
   return { results, report: evaluateClassificationResults(cases, results) };
 }
 
-export function validateEvaluationSet(cases: EvaluationCase[]): void {
+export function validateEvaluationSet(cases: unknown): asserts cases is EvaluationCase[] {
+  if (!Array.isArray(cases) || !cases.every(hasEvaluationCaseShape)) {
+    throw new Error('Evaluation Set does not match the required schema, including sourcePageId');
+  }
   if (cases.length < 100) throw new Error('Evaluation Set must contain at least 100 pages');
   const pageIds = new Set(cases.map(({ id }) => id));
+  const pageExampleIdentities = new Set(
+    cases.map(({ page }) => folderExampleIdentity(page.title, page.domain)),
+  );
   if (pageIds.size !== cases.length) throw new Error('Evaluation Set page ids must be unique');
 
   for (const item of cases) {
@@ -82,7 +86,10 @@ export function validateEvaluationSet(cases: EvaluationCase[]): void {
     }
     for (const folder of item.eligibleFolders) {
       for (const example of folder.examples) {
-        if (pageIds.has(example.sourcePageId)) {
+        if (
+          pageIds.has(example.sourcePageId) ||
+          pageExampleIdentities.has(folderExampleIdentity(example.title, example.domain))
+        ) {
           throw new Error(
             `Evaluation Set pages must be held out from Folder Examples: ${example.sourcePageId}`,
           );
@@ -125,9 +132,7 @@ export function evaluateClassificationResults(
       .sort((left, right) => right[1] - left[1])
       .slice(0, 3)
       .map(([folderId]) => resolvedFolderId(folderId, item.pendingFolderId));
-    const automatic = result.choice !== NO_MATCH_OPTION &&
-      result.confidence >= AUTOMATIC_CONFIDENCE_THRESHOLD &&
-      (result.probabilities[result.choice] ?? 0) >= AUTOMATIC_OPTION_PROBABILITY_THRESHOLD;
+    const automatic = result.choice !== NO_MATCH_OPTION && qualifiesForAutomaticSave(result);
     return {
       language: item.language,
       top1Correct: choice === item.expectedFolderId,
@@ -167,4 +172,48 @@ function ratio(numerator: number, denominator: number): number {
 
 function resolvedFolderId(choice: string, pendingFolderId: string): string {
   return choice === NO_MATCH_OPTION ? pendingFolderId : choice;
+}
+
+function hasEvaluationCaseShape(value: unknown): value is EvaluationCase {
+  if (!isRecord(value) || !isRecord(value.page) || !Array.isArray(value.eligibleFolders)) {
+    return false;
+  }
+  if (
+    typeof value.id !== 'string' ||
+    (value.language !== 'zh' && value.language !== 'en') ||
+    typeof value.labelSource !== 'string' ||
+    typeof value.expectedFolderId !== 'string' ||
+    typeof value.pendingFolderId !== 'string' ||
+    !hasStringFields(value.page, ['title', 'url', 'domain', 'description', 'h1', 'visibleText'])
+  ) {
+    return false;
+  }
+  return value.eligibleFolders.every((folder) => {
+    if (
+      !isRecord(folder) ||
+      typeof folder.id !== 'string' ||
+      typeof folder.path !== 'string' ||
+      !Array.isArray(folder.examples)
+    ) {
+      return false;
+    }
+    return folder.examples.every((example) => {
+      return isRecord(example) && hasStringFields(
+        example,
+        ['title', 'domain', 'sourcePageId'],
+      );
+    });
+  });
+}
+
+function folderExampleIdentity(title: string, domain: string): string {
+  return `${title.trim().toLocaleLowerCase()}\n${domain.trim().toLocaleLowerCase()}`;
+}
+
+function hasStringFields(value: Record<string, unknown>, fields: string[]): boolean {
+  return fields.every((field) => typeof value[field] === 'string');
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -88,6 +88,7 @@ export const COPY = {
   recordTimestamp: '时间',
   recordOriginalFolder: '原目录',
   recordFinalFolder: '最终目录',
+  recordPreservedFolders: '全部保留位置',
   recordNoFinalFolder: '已撤销或未更改收藏',
   recordUndoState: '撤销状态',
   recordClassificationPath: '分类路径',

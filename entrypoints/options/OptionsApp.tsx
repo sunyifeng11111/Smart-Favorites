@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 
 import {
   buildRecentRecordsExport,
-  type RecentRecordEventKind,
 } from '../../src/application/recent-records';
 import type { FolderExclusionNode } from '../../src/application/types';
 import type { SettingsView } from '../../src/runtime/messages';
@@ -191,10 +190,16 @@ export function OptionsApp() {
                   )}
                   <dt>{COPY.recordFinalFolder}</dt>
                   <dd>{record.finalFolder?.path ?? COPY.recordNoFinalFolder}</dd>
+                  {record.preservedFolders && record.preservedFolders.length > 1 && (
+                    <>
+                      <dt>{COPY.recordPreservedFolders}</dt>
+                      <dd>{record.preservedFolders.map(({ path }) => path).join('；')}</dd>
+                    </>
+                  )}
                   <dt>{COPY.recordUndoState}</dt>
                   <dd>{COPY.recordUndoStates[record.undoState]}</dd>
                   <dt>{COPY.recordClassificationPath}</dt>
-                  <dd>{record.classificationPath.map(({ kind }) => eventLabel(kind)).join(' → ')}</dd>
+                  <dd>{record.classificationPath.map(({ kind }) => COPY.recordEventLabels[kind]).join(' → ')}</dd>
                 </dl>
               </li>
             ))}
@@ -222,10 +227,6 @@ export function OptionsApp() {
       </section>
     </main>
   );
-}
-
-function eventLabel(kind: RecentRecordEventKind): string {
-  return COPY.recordEventLabels[kind];
 }
 
 function FolderTree({

@@ -47,6 +47,36 @@ describe('Recent Records', () => {
     expect(clearRecentRecords()).toEqual([]);
   });
 
+  it('redacts credentials and secret-like values embedded in allowed title and URL fields', () => {
+    const unsafeOperation = operation({
+      page: {
+        ...operation({}).page,
+        title: 'Authorization: Bearer title-secret api_key=title-key',
+        url: 'https://user:password@example.com/page?api_key=url-key&token=url-token&safe=yes#private',
+      },
+      status: 'saved',
+      finalFolderId: 'folder-a',
+      finalFolderPath: '书签栏 / A',
+      saveMethod: 'automatic',
+    });
+
+    const records = updateRecentRecords(
+      [],
+      operation({ status: 'creating-bookmark' }),
+      unsafeOperation,
+      now,
+    );
+    const serialized = JSON.stringify(records);
+
+    expect(serialized).not.toContain('title-secret');
+    expect(serialized).not.toContain('title-key');
+    expect(serialized).not.toContain('password');
+    expect(serialized).not.toContain('url-key');
+    expect(serialized).not.toContain('url-token');
+    expect(serialized).not.toContain('private');
+    expect(records[0]?.url).toContain('safe=yes');
+  });
+
   it('projects fallback, retry, correction, and Undo into one coherent record', () => {
     const pending = operation({
       status: 'pending',
@@ -136,6 +166,45 @@ describe('Recent Records', () => {
       'pending-fallback',
       'retry-failed',
     ]);
+  });
+
+  it('keeps every Existing Bookmark location when multiple duplicates are preserved', () => {
+    const duplicatePreserved = operation({
+      status: 'duplicate-preserved',
+      duplicateBookmarks: [
+        {
+          bookmarkId: 'bookmark-a',
+          parentId: 'folder-a',
+          index: 0,
+          title: 'Example',
+          url: 'https://example.com',
+          folderPath: '书签栏 / A',
+        },
+        {
+          bookmarkId: 'bookmark-b',
+          parentId: 'folder-b',
+          index: 0,
+          title: 'Example',
+          url: 'https://example.com',
+          folderPath: '书签栏 / B',
+        },
+      ],
+    });
+
+    const records = updateRecentRecords(
+      [],
+      operation({ status: 'duplicate-warning' }),
+      duplicatePreserved,
+      now,
+    );
+
+    expect(records[0]).toMatchObject({
+      finalFolder: { id: 'folder-a', path: '书签栏 / A' },
+      preservedFolders: [
+        { id: 'folder-a', path: '书签栏 / A' },
+        { id: 'folder-b', path: '书签栏 / B' },
+      ],
+    });
   });
 
   it('requires an explicit sensitive-field acknowledgement before local JSON export', () => {

@@ -37,6 +37,7 @@ export interface RecentRecord {
   updatedAt: string;
   classificationPath: RecentRecordEvent[];
   originalFolder?: RecentRecordFolder;
+  preservedFolders?: RecentRecordFolder[];
   finalFolder: RecentRecordFolder | null;
   undoState: 'available' | 'unavailable' | 'undone';
 }
@@ -68,8 +69,8 @@ export function updateRecentRecords(
   const next: RecentRecord = {
     id: operation.id,
     operationId: operation.id,
-    title: operation.page.title,
-    url: operation.page.url,
+    title: redactSensitiveText(operation.page.title),
+    url: redactSensitiveUrl(operation.page.url),
     timestamp: existing?.timestamp ?? operation.createdAt,
     updatedAt: recordedAt,
     classificationPath: [...(existing?.classificationPath ?? []), event],
@@ -77,6 +78,11 @@ export function updateRecentRecords(
       ? { originalFolder: existing.originalFolder }
       : fromFolder
         ? { originalFolder: fromFolder }
+        : {}),
+    ...(existing?.preservedFolders
+      ? { preservedFolders: existing.preservedFolders }
+      : operation.status === 'duplicate-preserved'
+        ? { preservedFolders: duplicateFolders(operation) }
         : {}),
     finalFolder: event.toFolder === undefined
       ? existing?.finalFolder ?? folderFromOperation(operation)
@@ -125,9 +131,7 @@ function recentRecordEvent(
     };
   }
   if (operation.status === 'duplicate-preserved' && previous?.status !== 'duplicate-preserved') {
-    const duplicate = operation.duplicateBookmarks.length === 1
-      ? operation.duplicateBookmarks[0]
-      : undefined;
+    const duplicate = operation.duplicateBookmarks[0];
     return {
       kind: 'duplicate-preserved',
       timestamp,
@@ -240,12 +244,15 @@ function parseRecentRecord(value: unknown): RecentRecord[] {
   return [{
     id: value.id,
     operationId: value.operationId,
-    title: value.title,
-    url: value.url,
+    title: redactSensitiveText(value.title),
+    url: redactSensitiveUrl(value.url),
     timestamp: value.timestamp,
     updatedAt: value.updatedAt,
     classificationPath,
     ...(originalFolder ? { originalFolder } : {}),
+    ...(parseFolders(value.preservedFolders).length > 0
+      ? { preservedFolders: parseFolders(value.preservedFolders) }
+      : {}),
     finalFolder: finalFolder ?? null,
     undoState: value.undoState,
   }];
@@ -274,6 +281,57 @@ function parseFolder(value: unknown): RecentRecordFolder | undefined {
     return undefined;
   }
   return { id: value.id, path: value.path };
+}
+
+function parseFolders(value: unknown): RecentRecordFolder[] {
+  return Array.isArray(value) ? value.flatMap((folder) => {
+    const parsed = parseFolder(folder);
+    return parsed ? [parsed] : [];
+  }) : [];
+}
+
+function duplicateFolders(operation: OperationState): RecentRecordFolder[] {
+  const folders = new Map<string, RecentRecordFolder>();
+  for (const duplicate of operation.duplicateBookmarks) {
+    folders.set(duplicate.parentId, {
+      id: duplicate.parentId,
+      path: duplicate.folderPath,
+    });
+  }
+  return [...folders.values()];
+}
+
+function redactSensitiveUrl(value: string): string {
+  try {
+    const url = new URL(value);
+    let changed = Boolean(url.username || url.password || url.hash);
+    url.username = '';
+    url.password = '';
+    for (const key of [...url.searchParams.keys()]) {
+      if (isSensitiveName(key)) {
+        url.searchParams.set(key, '[REDACTED]');
+        changed = true;
+      }
+    }
+    url.hash = '';
+    return changed ? url.href : value;
+  } catch {
+    return redactSensitiveText(value).replace(/#.*$/, '');
+  }
+}
+
+function redactSensitiveText(value: string): string {
+  return value
+    .replace(/\b(authorization\s*:\s*bearer)\s+[^\s]+/gi, '$1 [REDACTED]')
+    .replace(
+      /\b(api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|token|secret|password)\s*[:=]\s*[^\s&]+/gi,
+      '$1=[REDACTED]',
+    );
+}
+
+function isSensitiveName(value: string): boolean {
+  return /^(api[-_]?key|access[-_]?token|refresh[-_]?token|token|authorization|auth|secret|password)$/i
+    .test(value);
 }
 
 function isEventKind(value: unknown): value is RecentRecordEventKind {

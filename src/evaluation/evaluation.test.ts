@@ -74,6 +74,26 @@ describe('Evaluation Set runner', () => {
       { title: 'Leaked evaluation page', domain: 'example.com', sourcePageId: 'case-0' },
     ];
     expect(() => validateEvaluationSet(leaked)).toThrow('held out');
+
+    const spoofed = evaluationCases(100);
+    spoofed[1]!.eligibleFolders[0]!.examples = [
+      {
+        title: spoofed[0]!.page.title,
+        domain: spoofed[0]!.page.domain,
+        sourcePageId: 'pretend-external-page',
+      },
+    ];
+    expect(() => validateEvaluationSet(spoofed)).toThrow('held out');
+
+    const missingSource = evaluationCases(100) as unknown as Array<{
+      eligibleFolders: Array<{ examples: Array<Record<string, unknown>> }>;
+    }>;
+    missingSource[1]!.eligibleFolders[0]!.examples = [
+      { title: 'Missing source', domain: 'example.com' },
+    ];
+    expect(() => validateEvaluationSet(missingSource as unknown as EvaluationCase[])).toThrow(
+      'sourcePageId',
+    );
   });
 });
 
