@@ -12,7 +12,7 @@ export class ChromeBookmarkPort implements BookmarkPort {
   }
 
   async createFolderInOtherBookmarks(title: string): Promise<BookmarkNode> {
-    return mapBookmarkNode(await browser.bookmarks.create({ parentId: '2', title }));
+    return mapBookmarkNode(await browser.bookmarks.create({ title }));
   }
 
   async updateTitle(id: string, title: string): Promise<BookmarkNode> {

@@ -9,8 +9,12 @@ const chrome = vi.hoisted(() => {
     createBookmark: vi.fn(),
     browser: {
       bookmarks: {
-        create: vi.fn((input: { parentId: string; title: string; url?: string }) => {
-          return Promise.resolve({ id: 'created-node', ...input });
+        create: vi.fn((input: { parentId?: string; title: string; url?: string }) => {
+          return Promise.resolve({
+            id: 'created-node',
+            parentId: input.parentId ?? '420',
+            ...input,
+          });
         }),
         update: vi.fn((id: string, input: { title: string }) => {
           return Promise.resolve({ id, parentId: '2', ...input });
@@ -131,18 +135,14 @@ describe('Chrome durability adapters', () => {
     await expect(storage.getRecentRecords()).resolves.toEqual([]);
   });
 
-  it('creates a folder node without a bookmark URL', async () => {
+  it("creates the Pending Folder in the browser's profile-specific Other Bookmarks root", async () => {
     const bookmarks = new ChromeBookmarkPort();
 
     const folder = await bookmarks.createFolderInOtherBookmarks('待分类');
 
-    expect(chrome.browser.bookmarks.create).toHaveBeenCalledWith({
-      parentId: '2',
-      title: '待分类',
-    });
     expect(folder).toEqual({
       id: 'created-node',
-      parentId: '2',
+      parentId: '420',
       title: '待分类',
     });
   });
